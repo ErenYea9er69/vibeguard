@@ -1,0 +1,23 @@
+{
+  "name": "vibeguard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Exploit vibe-coded apps, patch every hole, prove each fix — zero false positives.",
+  "workspaces": [
+    "packages/types",
+    "packages/core",
+    "packages/cli",
+    "packages/web"
+  ],
+  "scripts": {
+    "build:types": "cd packages/types && npm run build",
+    "build:core": "cd packages/core && npm run build",
+    "build:cli": "cd packages/cli && npm run build",
+    "build": "npm run build:types && npm run build:core && npm run build:cli",
+    "dev:web": "cd packages/web && npm run dev",
+    "scan": "node packages/cli/dist/index.js scan"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
