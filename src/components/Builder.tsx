@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -13,11 +13,13 @@ import {
   FileText,
   Globe,
   Loader2,
+  Moon,
   Newspaper,
   PenLine,
   Play,
   RotateCcw,
   Sparkles,
+  Sun,
   X,
 } from "lucide-react";
 import { GeneratedDocument, OutputFormat, Tone } from "@/lib/types";
@@ -65,6 +67,18 @@ export default function Builder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState("");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const saved = (typeof window !== "undefined" && localStorage.getItem("cf-theme")) as "dark" | "light" | null;
+    if (saved === "light" || saved === "dark") setTheme(saved);
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("cf-theme", next);
+  }
 
   const stats = useMemo(
     () => ({
@@ -130,7 +144,7 @@ export default function Builder() {
   }
 
   return (
-    <div style={{ minHeight: "100vh" }}>
+    <div data-theme={theme} style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       {/* ——— Header ————————————————————————————— */}
       <header
         style={{
@@ -163,21 +177,31 @@ export default function Builder() {
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            padding: "0.375rem 0.875rem",
-            borderRadius: 999,
-            border: "1px solid var(--line-2)",
-            background: "rgba(255,255,255,.03)",
-            fontSize: 11,
-            color: "var(--muted)",
-          }}
-        >
-          <Sparkles size={11} />
-          Powered by Gemini
+        <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.875rem",
+              borderRadius: 999,
+              border: "1px solid var(--line-2)",
+              background: "rgba(255,255,255,.03)",
+              fontSize: 11,
+              color: "var(--muted)",
+            }}
+          >
+            <Sparkles size={11} />
+            Powered by Gemini
+          </div>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
         </div>
       </header>
 
@@ -204,7 +228,7 @@ export default function Builder() {
               width: 380,
               height: 380,
               borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(91,71,245,.18) 0%, transparent 70%)",
+              background: "radial-gradient(circle, rgba(192,57,43,.16) 0%, transparent 70%)",
               pointerEvents: "none",
             }}
           />
@@ -373,7 +397,7 @@ export default function Builder() {
                         >
                           <Icon
                             size={15}
-                            style={{ color: active ? "var(--indigo-2)" : "var(--muted)", marginBottom: "0.5rem" }}
+                            style={{ color: active ? "var(--red-2)" : "var(--muted)", marginBottom: "0.5rem" }}
                           />
                           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: "0.25rem" }}>{label}</div>
                           <div style={{ fontSize: 10.5, color: "var(--muted)", lineHeight: 1.5 }}>{desc}</div>
@@ -493,7 +517,7 @@ export default function Builder() {
                       style={{
                         fontSize: 13,
                         fontWeight: 600,
-                        color: "var(--indigo-2)",
+                        color: "var(--red-2)",
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
@@ -580,15 +604,15 @@ export default function Builder() {
                 width: 44,
                 height: 44,
                 borderRadius: 12,
-                background: "rgba(91,71,245,.1)",
-                border: "1px solid rgba(91,71,245,.2)",
+                background: "var(--red-dim)",
+                border: "1px solid rgba(192,57,43,.25)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 margin: "0 auto 1rem",
               }}
             >
-              <BookOpen size={20} style={{ color: "var(--indigo-2)" }} />
+              <BookOpen size={20} style={{ color: "var(--red-3)" }} />
             </div>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: "0.375rem" }}>
               Your artifact will appear here
@@ -605,7 +629,7 @@ export default function Builder() {
             <Loader2
               size={32}
               className="spin"
-              style={{ color: "var(--indigo-2)", display: "block", margin: "0 auto 1rem" }}
+              style={{ color: "var(--red-2)", display: "block", margin: "0 auto 1rem" }}
             />
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: "0.375rem" }}>Generating artifact…</div>
             <div style={{ fontSize: 13, color: "var(--muted)" }}>
@@ -637,7 +661,7 @@ export default function Builder() {
                   padding: "1.25rem",
                 }}
               >
-                <div className="doc-eyebrow" style={{ color: "var(--indigo-2)" }}>
+                <div className="doc-eyebrow" style={{ color: "var(--red-2)" }}>
                   Generated
                 </div>
                 <div
@@ -816,21 +840,9 @@ export default function Builder() {
                     { label: "Source", value: `${doc.source.videoCount} video${doc.source.videoCount !== 1 ? "s" : ""}` },
                     { label: "Format", value: doc.format },
                   ].map(({ label, value }) => (
-                    <div
-                      key={label}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.375rem",
-                        fontSize: 12,
-                        color: "var(--doc-muted)",
-                        background: "#f0eeeb",
-                        borderRadius: 6,
-                        padding: "0.3rem 0.625rem",
-                      }}
-                    >
-                      <span style={{ color: "#9b99a0" }}>{label}:</span>
-                      <span style={{ fontWeight: 500, color: "#3a3846" }}>{value}</span>
+                    <div key={label} className="cover-chip">
+                      <span>{label}:</span>
+                      <span style={{ fontWeight: 600, color: "var(--doc-text)" }}>{value}</span>
                     </div>
                   ))}
                 </div>
@@ -839,7 +851,7 @@ export default function Builder() {
               {/* Overview */}
               <section style={{ marginTop: "1.75rem", paddingBottom: "1.75rem", borderBottom: "1px solid var(--doc-line)" }}>
                 <div className="doc-eyebrow">Overview</div>
-                <p style={{ fontSize: 15, lineHeight: 1.8, color: "#4b4f60", marginTop: "0.5rem" }}>{doc.summary}</p>
+                <p style={{ fontSize: 15, lineHeight: 1.8, color: "var(--doc-muted)", marginTop: "0.5rem" }}>{doc.summary}</p>
 
                 {doc.learningOutcomes.length > 0 && (
                   <div style={{ marginTop: "1.25rem" }}>
@@ -847,7 +859,7 @@ export default function Builder() {
                       style={{
                         fontSize: 12,
                         fontWeight: 600,
-                        color: "#3a3846",
+                        color: "var(--doc-text)",
                         marginBottom: "0.625rem",
                         letterSpacing: "-0.01em",
                       }}
@@ -859,7 +871,7 @@ export default function Builder() {
                         <div key={i} className="outcome-item">
                           <Check
                             size={14}
-                            style={{ color: "var(--doc-indigo)", marginTop: 2, flexShrink: 0 }}
+                            style={{ color: "var(--doc-red)", marginTop: 2, flexShrink: 0 }}
                           />
                           {outcome}
                         </div>
@@ -887,21 +899,21 @@ export default function Builder() {
                         width: 26,
                         height: 26,
                         borderRadius: 8,
-                        background: "rgba(71,54,212,.1)",
-                        border: "1px solid rgba(71,54,212,.2)",
+                        background: "var(--red-dim)",
+                        border: "1px solid rgba(192,57,43,.25)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: 11,
                         fontWeight: 700,
-                        color: "var(--doc-indigo)",
+                        color: "var(--doc-red)",
                       }}
                     >
                       {si + 1}
                     </div>
                     <div style={{ flex: 1 }}>
                       <h3 className="section-heading">{section.title}</h3>
-                      <p style={{ marginTop: "0.5rem", fontSize: 14, lineHeight: 1.8, color: "#5b6070" }}>
+                      <p style={{ marginTop: "0.5rem", fontSize: 14, lineHeight: 1.8, color: "var(--doc-muted)" }}>
                         {section.intro}
                       </p>
                     </div>
@@ -917,13 +929,13 @@ export default function Builder() {
                             width: 28,
                             height: 28,
                             borderRadius: "50%",
-                            border: "1.5px solid #d8d6d0",
+                            border: "1.5px solid var(--doc-line)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             fontSize: 12,
                             fontWeight: 700,
-                            color: "#5b6070",
+                            color: "var(--doc-muted)",
                           }}
                         >
                           {li + 1}
@@ -932,7 +944,7 @@ export default function Builder() {
                           <div style={{ fontWeight: 600, fontSize: 15, color: "var(--doc-text)", lineHeight: 1.3 }}>
                             {lesson.title}
                           </div>
-                          <p style={{ marginTop: "0.5rem", fontSize: 14, lineHeight: 1.75, color: "#5b6070" }}>
+                          <p style={{ marginTop: "0.5rem", fontSize: 14, lineHeight: 1.75, color: "var(--doc-muted)" }}>
                             {lesson.summary}
                           </p>
 
@@ -944,7 +956,7 @@ export default function Builder() {
                                   fontWeight: 700,
                                   letterSpacing: "0.1em",
                                   textTransform: "uppercase",
-                                  color: "#9b99a0",
+                                  color: "var(--doc-muted)",
                                   marginBottom: "0.25rem",
                                 }}
                               >
@@ -962,7 +974,7 @@ export default function Builder() {
                                   fontWeight: 700,
                                   letterSpacing: "0.1em",
                                   textTransform: "uppercase",
-                                  color: "#9b99a0",
+                                  color: "var(--doc-muted)",
                                   marginBottom: "0.375rem",
                                 }}
                               >
@@ -970,7 +982,7 @@ export default function Builder() {
                               </div>
                               <ul style={{ paddingLeft: "1.25rem" }}>
                                 {lesson.keyPoints.map((pt, k) => (
-                                  <li key={k} style={{ fontSize: 13, color: "#5b6070", marginBottom: "0.25rem" }}>
+                                  <li key={k} style={{ fontSize: 13, color: "var(--doc-muted)", marginBottom: "0.25rem" }}>
                                     {pt}
                                   </li>
                                 ))}
@@ -986,7 +998,7 @@ export default function Builder() {
                                   fontWeight: 700,
                                   letterSpacing: "0.1em",
                                   textTransform: "uppercase",
-                                  color: "#9b99a0",
+                                  color: "var(--doc-muted)",
                                   marginBottom: "0.375rem",
                                 }}
                               >
@@ -994,7 +1006,7 @@ export default function Builder() {
                               </div>
                               <ul style={{ paddingLeft: "1.25rem" }}>
                                 {lesson.examples.map((ex, k) => (
-                                  <li key={k} style={{ fontSize: 13, color: "#5b6070", marginBottom: "0.25rem" }}>
+                                  <li key={k} style={{ fontSize: 13, color: "var(--doc-muted)", marginBottom: "0.25rem" }}>
                                     {ex}
                                   </li>
                                 ))}
@@ -1010,13 +1022,13 @@ export default function Builder() {
                                   fontWeight: 700,
                                   letterSpacing: "0.1em",
                                   textTransform: "uppercase",
-                                  color: "var(--doc-indigo)",
+                                  color: "var(--doc-red)",
                                   marginBottom: "0.375rem",
                                 }}
                               >
                                 Practice
                               </div>
-                              <div style={{ fontSize: 13, color: "#3a3a5c", lineHeight: 1.7 }}>
+                              <div style={{ fontSize: 13, color: "var(--doc-muted)", lineHeight: 1.7 }}>
                                 {lesson.exercise}
                               </div>
                             </div>
@@ -1030,7 +1042,7 @@ export default function Builder() {
                   {section.body?.map((para, pi) => (
                     <p
                       key={pi}
-                      style={{ marginTop: "1rem", fontSize: 15, lineHeight: 1.8, color: "#5b6070" }}
+                      style={{ marginTop: "1rem", fontSize: 15, lineHeight: 1.8, color: "var(--doc-muted)" }}
                     >
                       {para}
                     </p>
@@ -1045,7 +1057,7 @@ export default function Builder() {
                           fontWeight: 700,
                           letterSpacing: "0.1em",
                           textTransform: "uppercase",
-                          color: "#b45309",
+                          color: "var(--red-2)",
                           marginBottom: "0.5rem",
                         }}
                       >
@@ -1053,7 +1065,7 @@ export default function Builder() {
                       </div>
                       <ul style={{ paddingLeft: "1.125rem" }}>
                         {section.keyTakeaways.map((pt, k) => (
-                          <li key={k} style={{ fontSize: 13, color: "#6b4f14", marginBottom: "0.25rem", lineHeight: 1.6 }}>
+                          <li key={k} style={{ fontSize: 13, color: "var(--doc-muted)", marginBottom: "0.25rem", lineHeight: 1.6 }}>
                             {pt}
                           </li>
                         ))}
@@ -1073,16 +1085,16 @@ export default function Builder() {
                         <div
                           style={{
                             flexShrink: 0,
-                            width: 4,
+                            width: 3,
                             borderRadius: 2,
-                            background: "var(--doc-indigo)",
-                            opacity: 0.35,
+                            background: "var(--doc-red)",
+                            opacity: 0.5,
                             alignSelf: "stretch",
                           }}
                         />
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: "var(--doc-text)" }}>{item.term}</div>
-                          <div style={{ fontSize: 13, color: "#5b6070", lineHeight: 1.65, marginTop: "0.25rem" }}>
+                          <div style={{ fontSize: 13, color: "var(--doc-muted)", lineHeight: 1.65, marginTop: "0.25rem" }}>
                             {item.definition}
                           </div>
                         </div>
@@ -1101,7 +1113,7 @@ export default function Builder() {
                       <div key={i} className="outcome-item">
                         <CheckSquare
                           size={14}
-                          style={{ color: "var(--doc-indigo)", marginTop: 2, flexShrink: 0 }}
+                          style={{ color: "var(--doc-red)", marginTop: 2, flexShrink: 0 }}
                         />
                         {item}
                       </div>
@@ -1117,7 +1129,7 @@ export default function Builder() {
                   paddingTop: "1.25rem",
                   borderTop: "1px solid var(--doc-line)",
                   fontSize: 11,
-                  color: "#9b99a0",
+                  color: "var(--doc-muted)",
                   display: "flex",
                   justifyContent: "space-between",
                   flexWrap: "wrap",
