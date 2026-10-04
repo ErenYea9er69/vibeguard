@@ -162,11 +162,11 @@ export default function Builder() {
               width: 34,
               height: 34,
               borderRadius: 9,
-              background: "var(--indigo)",
+              background: "var(--red)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 2px 8px rgba(91,71,245,.4)",
+              boxShadow: "0 2px 8px rgba(192,57,43,.4)",
             }}
           >
             <Play size={14} color="#fff" fill="#fff" />
@@ -246,7 +246,7 @@ export default function Builder() {
                 fontWeight: 700,
                 lineHeight: 1.06,
                 letterSpacing: "-0.05em",
-                color: "#fff",
+                color: "var(--text)",
                 maxWidth: 640,
               }}
             >
@@ -289,12 +289,13 @@ export default function Builder() {
             >
               {/* Source panel */}
               <div
-                style={{
-                  background: "rgba(7,10,18,.75)",
+                              style={{
+                  background: "var(--panel-bg)",
                   border: "1px solid var(--line-2)",
                   borderRadius: 14,
                   padding: "1.25rem",
                   backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
                 }}
               >
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.75rem" }}>
