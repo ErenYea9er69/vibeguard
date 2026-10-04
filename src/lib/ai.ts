@@ -112,10 +112,14 @@ export async function generateDocument(args: {
   const applyRules = args.strictRules !== false;
   const rulesSection = applyRules ? `\n\n${WRITING_RULES_PROMPT}` : "";
 
+  const audienceDirective = args.audience && args.audience.trim()
+    ? `Audience: ${args.audience.trim()}`
+    : `Audience: [AUTO-DETECT]. The audience was not specified. Analyze the video topic, depth, and prerequisite knowledge. Automatically deduce the exact target learner persona (experience level, role, and practical goal) and write this tailored persona into the "audience" field in the output document.`;
+
   const prompt = `You are CourseForge, a senior instructional designer and technical editor. Transform the provided YouTube material into a coherent ${args.format}. Preserve factual meaning. Do not invent facts that the source does not support. Resolve repetition, remove filler, and reorder ideas when this creates a better learning sequence.
 
 Output format: ${args.format}
-Audience: ${args.audience}
+${audienceDirective}
 Tone: ${args.tone}
 Language: ${args.language}
 
@@ -124,20 +128,37 @@ For course output, organize sections into lessons with objectives, key points, e
 SOURCE MATERIAL:
 ${prepared}`;
 
-  const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
-    contents: prompt,
-    config: {
-      ...(applyRules ? { systemInstruction: WRITING_RULES_PROMPT } : {}),
-      responseMimeType: "application/json",
-      responseSchema: schema,
-      temperature: 0.25,
-      maxOutputTokens: 12000
-    }
-  });
+  let response;
+  let lastError: unknown;
+  const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
-  const raw = response.text?.trim();
-  if (!raw) throw new Error("The model returned an empty response.");
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: {
+          ...(applyRules ? { systemInstruction: WRITING_RULES_PROMPT } : {}),
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          temperature: 0.25,
+          maxOutputTokens: 12000
+        }
+      });
+      if (response?.text?.trim()) break;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+      }
+    }
+  }
+
+  const raw = response?.text?.trim();
+  if (!raw) {
+    const errMsg = lastError instanceof Error ? lastError.message : "The model returned an empty response.";
+    throw new Error(errMsg);
+  }
   const parsedJson = JSON.parse(raw);
   const parsed = (applyRules ? sanitizeDocument(parsedJson) : parsedJson) as Omit<GeneratedDocument, "source" | "generatedAt">;
 

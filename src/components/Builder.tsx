@@ -61,9 +61,7 @@ export default function Builder() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [format, setFormat] = useState<OutputFormat>("course");
   const [tone, setTone] = useState<Tone>("practical");
-  const [audience, setAudience] = useState(
-    "Developers who know the basics and want a practical, structured path."
-  );
+  const [audience, setAudience] = useState("");
   const [language, setLanguage] = useState("en");
   const [maxVideos, setMaxVideos] = useState(12);
   const [doc, setDoc] = useState<GeneratedDocument | null>(null);
@@ -74,6 +72,23 @@ export default function Builder() {
   const [strictRules, setStrictRules] = useState(true);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [tab, setTab] = useState<"read" | StudioTab>("read");
+
+  const inputType = useMemo(() => {
+    const trimmed = sourceUrl.trim();
+    if (!trimmed) return "empty";
+    try {
+      const url = new URL(trimmed);
+      const list = url.searchParams.get("list");
+      const v = url.searchParams.get("v") || (url.hostname === "youtu.be" ? url.pathname.slice(1).split("?")[0] : null);
+      if (list && !v) return "playlist";
+      if (v) return list ? "video-in-playlist" : "video";
+      if (url.pathname.startsWith("/shorts/")) return "video";
+      if (list) return "playlist";
+    } catch {}
+    if (/^PL[a-zA-Z0-9_-]+$/.test(trimmed)) return "playlist";
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return "video";
+    return "unknown";
+  }, [sourceUrl]);
 
   useEffect(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem("cf-theme")) as "dark" | "light" | null;
@@ -100,16 +115,17 @@ export default function Builder() {
     setError("");
     setLoading(true);
     try {
+      const isSingleVideo = inputType === "video" || inputType === "video-in-playlist";
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceUrl: sourceUrl || "https://www.youtube.com/playlist?list=DEMO",
+          sourceUrl: sourceUrl.trim(),
           format,
           tone,
-          audience,
+          audience: audience.trim(),
           language,
-          maxVideos,
+          maxVideos: isSingleVideo ? 1 : maxVideos,
           strictRules,
         }),
       });
@@ -329,7 +345,7 @@ export default function Builder() {
                     id="source-url"
                     value={sourceUrl}
                     onChange={(e) => setSourceUrl(e.target.value)}
-                    placeholder="https://youtube.com/playlist?list=..."
+                    placeholder="Paste YouTube video or playlist URL..."
                     style={{
                       flex: 1,
                       background: "transparent",
@@ -359,8 +375,30 @@ export default function Builder() {
                   )}
                 </div>
 
-                <div style={{ marginTop: "0.625rem", fontSize: 11, color: "var(--subtle)" }}>
-                  Accepts playlist URL, video URL, playlist ID, or video ID.
+                <div style={{ marginTop: "0.5rem", fontSize: 11 }}>
+                  {inputType === "video" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--red-2)", fontWeight: 500 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red-2)" }} />
+                      Single video detected (max videos locked to 1)
+                    </div>
+                  )}
+                  {inputType === "playlist" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--red-2)", fontWeight: 500 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red-2)" }} />
+                      Playlist detected (select how many videos to include below)
+                    </div>
+                  )}
+                  {inputType === "video-in-playlist" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--muted)" }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--muted)" }} />
+                      Video from playlist link detected (processing this single video)
+                    </div>
+                  )}
+                  {inputType === "empty" && (
+                    <span style={{ color: "var(--subtle)" }}>
+                      Paste a single video or full playlist link.
+                    </span>
+                  )}
                 </div>
 
                 {/* Sample pills */}
@@ -434,14 +472,20 @@ export default function Builder() {
 
                 {/* Audience */}
                 <label style={{ display: "block" }}>
-                  <span style={{ fontSize: 11, color: "var(--subtle)", display: "block", marginBottom: "0.375rem" }}>
-                    Audience
-                  </span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.375rem" }}>
+                    <span style={{ fontSize: 11, color: "var(--subtle)" }}>
+                      Target Audience
+                    </span>
+                    <span style={{ fontSize: 10, color: "var(--red-2)", fontWeight: 500 }}>
+                      Optional • AI auto-detects persona if empty
+                    </span>
+                  </div>
                   <textarea
                     id="audience-field"
                     value={audience}
                     onChange={(e) => setAudience(e.target.value)}
-                    rows={3}
+                    placeholder="Leave empty for AI to infer persona automatically, or specify custom..."
+                    rows={2}
                     className="field"
                     style={{ resize: "none", fontSize: 13 }}
                   />
@@ -512,48 +556,105 @@ export default function Builder() {
                   </label>
                 </div>
 
-                {/* Max videos */}
+                {/* Max videos - semi-auto based on video vs playlist */}
                 <div style={{ marginTop: "1rem" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    <span style={{ fontSize: 11, color: "var(--subtle)" }}>Max videos to process</span>
-                    <span
+                  {inputType === "video" || inputType === "video-in-playlist" ? (
+                    <div
                       style={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: "var(--red-2)",
-                        fontVariantNumeric: "tabular-nums",
+                        padding: "0.625rem 0.75rem",
+                        borderRadius: 8,
+                        background: "var(--field-bg)",
+                        border: "1px solid var(--line-2)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
                       }}
                     >
-                      {maxVideos}
-                    </span>
-                  </div>
-                  <input
-                    id="max-videos-range"
-                    type="range"
-                    min="1"
-                    max="30"
-                    value={maxVideos}
-                    onChange={(e) => setMaxVideos(Number(e.target.value))}
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginTop: "0.25rem",
-                      fontSize: 10,
-                      color: "var(--subtle)",
-                    }}
-                  >
-                    <span>1</span>
-                    <span>30</span>
-                  </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>
+                          Single video mode
+                        </div>
+                        <div style={{ fontSize: 10, color: "var(--muted)" }}>
+                          Auto-configured to 1 video
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "var(--red-2)",
+                          background: "var(--red-dim)",
+                          border: "1px solid rgba(192,57,43,0.3)",
+                          padding: "0.2rem 0.5rem",
+                          borderRadius: 6,
+                        }}
+                      >
+                        1 video
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "baseline",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
+                        <span style={{ fontSize: 11, color: "var(--subtle)" }}>
+                          {inputType === "playlist" ? "Playlist video count" : "Max videos (for playlists)"}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "var(--red-2)",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {maxVideos} videos
+                        </span>
+                      </div>
+                      <input
+                        id="max-videos-range"
+                        type="range"
+                        min="1"
+                        max="30"
+                        value={maxVideos}
+                        onChange={(e) => setMaxVideos(Number(e.target.value))}
+                      />
+                      {/* Semi-auto quick presets */}
+                      <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.375rem" }}>
+                        {[
+                          { label: "1 (single)", value: 1 },
+                          { label: "5 vids", value: 5 },
+                          { label: "12 vids", value: 12 },
+                          { label: "20 vids", value: 20 },
+                          { label: "All (30)", value: 30 },
+                        ].map((preset) => (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            onClick={() => setMaxVideos(preset.value)}
+                            style={{
+                              flex: 1,
+                              padding: "0.2rem 0",
+                              fontSize: 10,
+                              fontWeight: maxVideos === preset.value ? 700 : 500,
+                              color: maxVideos === preset.value ? "var(--text)" : "var(--muted)",
+                              background: maxVideos === preset.value ? "var(--red-dim)" : "var(--field-bg)",
+                              border: maxVideos === preset.value ? "1px solid var(--red-2)" : "1px solid var(--line)",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* AI Writing Rules & Quality Controls */}
@@ -652,7 +753,7 @@ export default function Builder() {
                 </button>
 
                 <div style={{ marginTop: "0.625rem", textAlign: "center", fontSize: 11, color: "var(--subtle)" }}>
-                  No URL? Leave blank to run in demo mode.
+                  Paste any YouTube video or playlist URL above to generate.
                 </div>
               </div>
             </div>
