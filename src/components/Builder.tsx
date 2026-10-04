@@ -1,20 +1,64 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { ArrowRight, Check, ChevronDown, Download, FileJson, FileText, Globe2, Loader2, PlaySquare, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  Check,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  FileCode2,
+  FileText,
+  Globe,
+  Loader2,
+  Newspaper,
+  PenLine,
+  Play,
+  RotateCcw,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { GeneratedDocument, OutputFormat, Tone } from "@/lib/types";
 
-const presets = {
-  course: { label: "Course", icon: PlaySquare, desc: "Lessons, objectives, examples, exercises" },
-  article: { label: "Article", icon: FileText, desc: "Structured long-form reading" },
-  blog: { label: "Blog", icon: Sparkles, desc: "Scannable sections and takeaways" }
-} satisfies Record<OutputFormat, { label: string; icon: typeof PlaySquare; desc: string }>;
+const FORMAT_PRESETS = {
+  course: {
+    label: "Course",
+    Icon: BookOpen,
+    desc: "Lessons, objectives, examples, exercises",
+  },
+  article: {
+    label: "Article",
+    Icon: Newspaper,
+    desc: "Structured long-form reading",
+  },
+  blog: {
+    label: "Blog",
+    Icon: PenLine,
+    desc: "Scannable sections and takeaways",
+  },
+} satisfies Record<OutputFormat, { label: string; Icon: typeof BookOpen; desc: string }>;
+
+const EXPORT_OPTIONS = [
+  { format: "pdf" as const, label: "PDF document", Icon: FileText },
+  { format: "html" as const, label: "HTML file", Icon: Globe },
+  { format: "json" as const, label: "JSON data", Icon: FileCode2 },
+];
+
+const SAMPLE_URLS = [
+  { label: "Next.js course", url: "https://www.youtube.com/playlist?list=PL4cUxeGkcC9jZIVqmy_QhfQdi6mzzvP7l" },
+  { label: "TypeScript crash", url: "https://www.youtube.com/watch?v=BCg4U1FzODs" },
+  { label: "System design", url: "https://www.youtube.com/playlist?list=PLMCXHnjXnTnvo6alSjVkgxV-VH6EPyvoX" },
+];
 
 export default function Builder() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [format, setFormat] = useState<OutputFormat>("course");
   const [tone, setTone] = useState<Tone>("practical");
-  const [audience, setAudience] = useState("Developers who know the basics and want a practical, structured path.");
+  const [audience, setAudience] = useState(
+    "Developers who know the basics and want a practical, structured path."
+  );
   const [language, setLanguage] = useState("en");
   const [maxVideos, setMaxVideos] = useState(12);
   const [doc, setDoc] = useState<GeneratedDocument | null>(null);
@@ -22,11 +66,14 @@ export default function Builder() {
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState("");
 
-  const stats = useMemo(() => ({
-    sections: doc?.sections.length || 0,
-    lessons: doc?.sections.reduce((sum, section) => sum + (section.lessons?.length || 0), 0) || 0,
-    sources: doc?.source.videoCount || 0
-  }), [doc]);
+  const stats = useMemo(
+    () => ({
+      sections: doc?.sections.length ?? 0,
+      lessons: doc?.sections.reduce((s, sec) => s + (sec.lessons?.length ?? 0), 0) ?? 0,
+      sources: doc?.source.videoCount ?? 0,
+    }),
+    [doc]
+  );
 
   async function generate(event?: FormEvent) {
     event?.preventDefault();
@@ -36,12 +83,21 @@ export default function Builder() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrl: sourceUrl || "https://www.youtube.com/playlist?list=DEMO", format, tone, audience, language, maxVideos })
+        body: JSON.stringify({
+          sourceUrl: sourceUrl || "https://www.youtube.com/playlist?list=DEMO",
+          format,
+          tone,
+          audience,
+          language,
+          maxVideos,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed.");
       setDoc(data);
-      window.scrollTo({ top: window.innerHeight + 500, behavior: "smooth" });
+      setTimeout(() => {
+        document.getElementById("output-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed.");
     } finally {
@@ -49,17 +105,21 @@ export default function Builder() {
     }
   }
 
-  async function exportDocument(format: "pdf" | "html" | "json") {
+  async function exportDocument(fmt: "pdf" | "html" | "json") {
     if (!doc) return;
-    setExporting(format);
+    setExporting(fmt);
     try {
-      const res = await fetch(`/api/export/${format}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
+      const res = await fetch(`/api/export/${fmt}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(doc),
+      });
       if (!res.ok) throw new Error("Export failed.");
       const blob = await res.blob();
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = href;
-      anchor.download = `courseforge.${format}`;
+      anchor.download = `courseforge.${fmt}`;
       anchor.click();
       URL.revokeObjectURL(href);
     } catch (e) {
@@ -69,74 +129,1009 @@ export default function Builder() {
     }
   }
 
-  return <div className="min-h-screen">
-    <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-10">
-      <div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-xl bg-white text-black font-black">C</div><div><div className="font-semibold tracking-tight">CourseForge</div><div className="text-[11px] text-zinc-500">source → learning artifact</div></div></div>
-      <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[.03] px-3 py-1.5 text-xs text-zinc-400 md:flex"><Globe2 size={13}/> Next.js · Tailwind · Gemini</div>
-    </header>
-
-    <main className="mx-auto max-w-7xl px-6 pb-20 lg:px-10">
-      <section className="grid-bg glow overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.025] px-6 py-10 md:px-10 md:py-14">
-        <div className="max-w-4xl">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-400/10 px-3 py-1.5 text-xs text-violet-200"><Sparkles size={13}/> Turn long-form video into something you can actually study</div>
-          <h1 className="text-4xl font-semibold tracking-[-0.05em] text-white md:text-6xl">Drop a YouTube course.<br/><span className="text-zinc-500">Get a real learning artifact.</span></h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-400">CourseForge pulls video structure and transcripts, removes repetition, rebuilds the knowledge in a coherent order, then exports it as a course, article, blog, JSON, HTML, or PDF.</p>
+  return (
+    <div style={{ minHeight: "100vh" }}>
+      {/* ——— Header ————————————————————————————— */}
+      <header
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: "1.25rem 2rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 9,
+              background: "var(--indigo)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(91,71,245,.4)",
+            }}
+          >
+            <Play size={14} color="#fff" fill="#fff" />
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em" }}>CourseForge</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>YouTube → structured learning</div>
+          </div>
         </div>
 
-        <form onSubmit={generate} className="mt-10 grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
-          <div className="rounded-2xl border border-white/10 bg-[#08090d]/90 p-5">
-            <label className="text-xs font-medium text-zinc-400">YouTube source</label>
-            <div className="mt-2 flex rounded-xl border border-white/10 bg-black/20 px-4 py-3 focus-within:border-violet-400/60"><PlaySquare className="mr-3 mt-0.5 text-zinc-600" size={18}/><input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://youtube.com/playlist?list=..." className="w-full bg-transparent text-sm text-white outline-none placeholder:text-zinc-700"/></div>
-            <div className="mt-3 text-xs text-zinc-600">Accepts a playlist URL, a single video URL, playlist ID, or video ID.</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
+            padding: "0.375rem 0.875rem",
+            borderRadius: 999,
+            border: "1px solid var(--line-2)",
+            background: "rgba(255,255,255,.03)",
+            fontSize: 11,
+            color: "var(--muted)",
+          }}
+        >
+          <Sparkles size={11} />
+          Powered by Gemini
+        </div>
+      </header>
 
-            <div className="mt-7 grid gap-3 sm:grid-cols-3">
-              {(Object.keys(presets) as OutputFormat[]).map(key => {
-                const preset = presets[key]; const Icon = preset.icon; const active = format === key;
-                return <button key={key} type="button" onClick={() => setFormat(key)} className={`rounded-xl border p-4 text-left transition ${active ? "border-violet-400/60 bg-violet-400/10" : "border-white/8 bg-white/[.02] hover:bg-white/[.04]"}`}><Icon size={17} className={active ? "text-violet-300" : "text-zinc-500"}/><div className="mt-3 text-sm font-medium">{preset.label}</div><div className="mt-1 text-xs leading-5 text-zinc-500">{preset.desc}</div></button>
-              })}
+      <main style={{ maxWidth: 1280, margin: "0 auto", padding: "0 2rem 5rem" }}>
+        {/* ——— Hero ——————————————————————————————— */}
+        <section
+          className="grid-lines hero-glow"
+          style={{
+            borderRadius: 20,
+            border: "1px solid var(--line-2)",
+            background: "var(--surface)",
+            padding: "3rem 3rem 3.5rem",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          {/* Glow orb */}
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: -80,
+              left: -60,
+              width: 380,
+              height: 380,
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(91,71,245,.18) 0%, transparent 70%)",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div style={{ position: "relative", zIndex: 1, maxWidth: 960 }}>
+            {/* Badge */}
+            <div className="demo-badge" style={{ marginBottom: "1.5rem" }}>
+              <span className="demo-dot" />
+              Demo mode active — no API keys needed
             </div>
+
+            <h1
+              style={{
+                fontSize: "clamp(2rem, 5vw, 3.25rem)",
+                fontWeight: 700,
+                lineHeight: 1.06,
+                letterSpacing: "-0.05em",
+                color: "#fff",
+                maxWidth: 640,
+              }}
+            >
+              Turn YouTube playlists into structured learning.
+            </h1>
+            <p
+              style={{
+                marginTop: "1rem",
+                fontSize: 15,
+                color: "var(--muted)",
+                maxWidth: 520,
+                lineHeight: 1.7,
+              }}
+            >
+              CourseForge pulls transcripts, removes repetition, rebuilds concepts in a coherent order, and exports a
+              course, article, or blog — ready to read or download.
+            </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#08090d]/90 p-5">
-            <div className="text-xs font-medium text-zinc-400">Generation settings</div>
-            <label className="mt-5 block text-xs text-zinc-600">Audience</label>
-            <textarea value={audience} onChange={e => setAudience(e.target.value)} rows={3} className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-zinc-200 outline-none focus:border-violet-400/60"/>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <label className="relative"><span className="text-xs text-zinc-600">Tone</span><select value={tone} onChange={e => setTone(e.target.value as Tone)} className="mt-2 w-full appearance-none rounded-xl border border-white/10 bg-black/20 p-3 text-sm outline-none"><option value="practical">Practical</option><option value="clear">Clear</option><option value="technical">Technical</option><option value="academic">Academic</option></select><ChevronDown className="pointer-events-none absolute right-3 top-9 text-zinc-600" size={15}/></label>
-              <label className="relative"><span className="text-xs text-zinc-600">Language</span><select value={language} onChange={e => setLanguage(e.target.value)} className="mt-2 w-full appearance-none rounded-xl border border-white/10 bg-black/20 p-3 text-sm outline-none"><option value="en">English</option><option value="fr">French</option><option value="ar">Arabic</option><option value="es">Spanish</option></select><ChevronDown className="pointer-events-none absolute right-3 top-9 text-zinc-600" size={15}/></label>
-            </div>
-            <label className="mt-4 block text-xs text-zinc-600">Max videos: <span className="text-zinc-300">{maxVideos}</span></label>
-            <input type="range" min="1" max="30" value={maxVideos} onChange={e => setMaxVideos(Number(e.target.value))} className="mt-2 w-full accent-violet-500"/>
-            <button disabled={loading} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-60">{loading ? <><Loader2 size={16} className="animate-spin"/> Building...</> : <>Build artifact <ArrowRight size={16}/></>}</button>
-            <div className="mt-3 text-center text-[11px] text-zinc-600">No API keys? The project ships with a local demo mode.</div>
-          </div>
-        </form>
-        {error && <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-200">{error}</div>}
-      </section>
+          {/* ——— Form ——————————————————————————— */}
+          <form
+            onSubmit={generate}
+            style={{
+              position: "relative",
+              zIndex: 1,
+              marginTop: "2.5rem",
+              display: "grid",
+              gap: "1.25rem",
+              gridTemplateColumns: "1fr",
+            }}
+          >
+            {/* Top row: source + settings side by side on wide */}
+            <div
+              style={{
+                display: "grid",
+                gap: "1.25rem",
+                gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+                alignItems: "start",
+              }}
+            >
+              {/* Source panel */}
+              <div
+                style={{
+                  background: "rgba(7,10,18,.75)",
+                  border: "1px solid var(--line-2)",
+                  borderRadius: 14,
+                  padding: "1.25rem",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.75rem" }}>
+                  YouTube source
+                </div>
 
-      {doc && <section className="mt-10 grid gap-6 lg:grid-cols-[.72fr_1.28fr]">
-        <aside className="lg:sticky lg:top-5 lg:self-start">
-          <div className="rounded-2xl border border-white/10 bg-white/[.025] p-5">
-            <div className="text-xs uppercase tracking-[.18em] text-violet-300">Generated</div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight">{doc.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-500">{doc.subtitle}</p>
-            <div className="mt-5 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/8 bg-white/[.02] p-3"><div className="text-xl font-semibold">{stats.sections}</div><div className="text-[11px] text-zinc-600">sections</div></div><div className="rounded-xl border border-white/8 bg-white/[.02] p-3"><div className="text-xl font-semibold">{stats.lessons}</div><div className="text-[11px] text-zinc-600">lessons</div></div><div className="rounded-xl border border-white/8 bg-white/[.02] p-3"><div className="text-xl font-semibold">{stats.sources}</div><div className="text-[11px] text-zinc-600">videos</div></div></div>
-            <div className="mt-5 space-y-2 text-sm text-zinc-500"><div className="flex justify-between"><span>Audience</span><span className="max-w-[55%] text-right text-zinc-300">{doc.audience}</span></div><div className="flex justify-between"><span>Time</span><span className="text-zinc-300">{doc.estimatedTime}</span></div></div>
-            <div className="mt-6 grid gap-2">
-              {(["pdf", "html", "json"] as const).map(item => <button key={item} onClick={() => exportDocument(item)} disabled={Boolean(exporting)} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-zinc-300 hover:bg-white/[.04] disabled:opacity-50"><span className="flex items-center gap-2">{item === "pdf" ? <FileText size={15}/> : item === "html" ? <Globe2 size={15}/> : <FileJson size={15}/>} Download {item.toUpperCase()}</span>{exporting === item ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>}</button>)}
+                {/* URL input */}
+                <div
+                  className="focus-ring"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    background: "var(--field-bg)",
+                    border: "1px solid var(--line-2)",
+                    borderRadius: 10,
+                    padding: "0 0.875rem",
+                    transition: "border-color 0.15s, box-shadow 0.15s",
+                  }}
+                >
+                  <Play size={14} style={{ color: "var(--subtle)", flexShrink: 0 }} />
+                  <input
+                    id="source-url"
+                    value={sourceUrl}
+                    onChange={(e) => setSourceUrl(e.target.value)}
+                    placeholder="https://youtube.com/playlist?list=..."
+                    style={{
+                      flex: 1,
+                      background: "transparent",
+                      border: "none",
+                      outline: "none",
+                      padding: "0.75rem 0",
+                      fontSize: 13,
+                      color: "var(--text)",
+                    }}
+                  />
+                  {sourceUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setSourceUrl("")}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--subtle)",
+                        padding: "0.25rem",
+                        display: "flex",
+                      }}
+                      aria-label="Clear URL"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ marginTop: "0.625rem", fontSize: 11, color: "var(--subtle)" }}>
+                  Accepts playlist URL, video URL, playlist ID, or video ID.
+                </div>
+
+                {/* Sample pills */}
+                <div
+                  style={{
+                    marginTop: "0.875rem",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "0.375rem",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: "var(--subtle)" }}>Try:</span>
+                  {SAMPLE_URLS.map((s) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      className="sample-pill"
+                      onClick={() => setSourceUrl(s.url)}
+                    >
+                      {s.label}
+                      <ChevronRight size={10} />
+                    </button>
+                  ))}
+                </div>
+
+                {/* Format cards */}
+                <div style={{ marginTop: "1.25rem" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.625rem" }}>
+                    Output format
+                  </div>
+                  <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(3, 1fr)" }}>
+                    {(Object.keys(FORMAT_PRESETS) as OutputFormat[]).map((key) => {
+                      const { label, Icon, desc } = FORMAT_PRESETS[key];
+                      const active = format === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          id={`format-${key}`}
+                          onClick={() => setFormat(key)}
+                          className={`fmt-card${active ? " active" : ""}`}
+                        >
+                          <Icon
+                            size={15}
+                            style={{ color: active ? "var(--indigo-2)" : "var(--muted)", marginBottom: "0.5rem" }}
+                          />
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: "0.25rem" }}>{label}</div>
+                          <div style={{ fontSize: 10.5, color: "var(--muted)", lineHeight: 1.5 }}>{desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Settings panel */}
+              <div
+                style={{
+                  background: "rgba(7,10,18,.75)",
+                  border: "1px solid var(--line-2)",
+                  borderRadius: 14,
+                  padding: "1.25rem",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.75rem" }}>
+                  Generation settings
+                </div>
+
+                {/* Audience */}
+                <label style={{ display: "block" }}>
+                  <span style={{ fontSize: 11, color: "var(--subtle)", display: "block", marginBottom: "0.375rem" }}>
+                    Audience
+                  </span>
+                  <textarea
+                    id="audience-field"
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    rows={3}
+                    className="field"
+                    style={{ resize: "none", fontSize: 13 }}
+                  />
+                </label>
+
+                {/* Tone + Language */}
+                <div style={{ marginTop: "0.875rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <label style={{ display: "block" }}>
+                    <span style={{ fontSize: 11, color: "var(--subtle)", display: "block", marginBottom: "0.375rem" }}>
+                      Tone
+                    </span>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        id="tone-select"
+                        value={tone}
+                        onChange={(e) => setTone(e.target.value as Tone)}
+                        className="field"
+                        style={{ fontSize: 13, paddingRight: "2rem" }}
+                      >
+                        <option value="practical">Practical</option>
+                        <option value="clear">Clear</option>
+                        <option value="technical">Technical</option>
+                        <option value="academic">Academic</option>
+                      </select>
+                      <ChevronDown
+                        size={13}
+                        style={{
+                          position: "absolute",
+                          right: "0.75rem",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "var(--muted)",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  </label>
+
+                  <label style={{ display: "block" }}>
+                    <span style={{ fontSize: 11, color: "var(--subtle)", display: "block", marginBottom: "0.375rem" }}>
+                      Language
+                    </span>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        id="language-select"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        className="field"
+                        style={{ fontSize: 13, paddingRight: "2rem" }}
+                      >
+                        <option value="en">English</option>
+                        <option value="fr">French</option>
+                        <option value="ar">Arabic</option>
+                        <option value="es">Spanish</option>
+                      </select>
+                      <ChevronDown
+                        size={13}
+                        style={{
+                          position: "absolute",
+                          right: "0.75rem",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "var(--muted)",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                {/* Max videos */}
+                <div style={{ marginTop: "1rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: "var(--subtle)" }}>Max videos to process</span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--indigo-2)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {maxVideos}
+                    </span>
+                  </div>
+                  <input
+                    id="max-videos-range"
+                    type="range"
+                    min="1"
+                    max="30"
+                    value={maxVideos}
+                    onChange={(e) => setMaxVideos(Number(e.target.value))}
+                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "0.25rem",
+                      fontSize: 10,
+                      color: "var(--subtle)",
+                    }}
+                  >
+                    <span>1</span>
+                    <span>30</span>
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <button
+                  id="build-artifact-btn"
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary"
+                  style={{ marginTop: "1.25rem" }}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 size={15} className="spin" />
+                      Building artifact…
+                    </>
+                  ) : (
+                    <>
+                      Build artifact
+                      <ArrowRight size={15} />
+                    </>
+                  )}
+                </button>
+
+                <div style={{ marginTop: "0.625rem", textAlign: "center", fontSize: 11, color: "var(--subtle)" }}>
+                  No URL? Leave blank to run in demo mode.
+                </div>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div
+                style={{
+                  marginTop: "0.5rem",
+                  padding: "0.75rem 1rem",
+                  borderRadius: 10,
+                  border: "1px solid rgba(239,68,68,.25)",
+                  background: "rgba(239,68,68,.06)",
+                  color: "#fca5a5",
+                  fontSize: 13,
+                  display: "flex",
+                  gap: "0.5rem",
+                  alignItems: "flex-start",
+                }}
+              >
+                <X size={14} style={{ marginTop: 2, flexShrink: 0 }} />
+                {error}
+              </div>
+            )}
+          </form>
+        </section>
+
+        {/* ——— Output section ————————————————————— */}
+        {!doc && !loading && (
+          <div className="empty-state" style={{ marginTop: "2rem" }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: "rgba(91,71,245,.1)",
+                border: "1px solid rgba(91,71,245,.2)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 1rem",
+              }}
+            >
+              <BookOpen size={20} style={{ color: "var(--indigo-2)" }} />
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: "0.375rem" }}>
+              Your artifact will appear here
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)" }}>
+              Fill in a YouTube URL (or leave blank for demo) and click{" "}
+              <strong style={{ color: "var(--text)" }}>Build artifact</strong>.
             </div>
           </div>
-        </aside>
+        )}
 
-        <article className="rounded-2xl border border-white/10 bg-[#fbfbfa] p-7 text-[#18191f] md:p-10">
-          <div className="text-[11px] font-semibold tracking-[.18em] text-violet-600">{doc.format.toUpperCase()}</div>
-          <h2 className="mt-3 text-4xl font-semibold tracking-[-.04em]">{doc.title}</h2>
-          <p className="mt-3 text-zinc-500">{doc.subtitle}</p>
-          <div className="mt-8 border-y border-zinc-200 py-6"><div className="text-sm font-semibold">Overview</div><p className="mt-2 text-[15px] leading-7 text-zinc-600">{doc.summary}</p><div className="mt-4 grid gap-2">{doc.learningOutcomes.map((x, i) => <div key={i} className="flex gap-2 text-sm text-zinc-600"><Check className="mt-0.5 shrink-0 text-violet-600" size={16}/>{x}</div>)}</div></div>
-          {doc.sections.map((section, index) => <section key={index} className="mt-10 border-b border-zinc-200 pb-8 last:border-0"><div className="text-[10px] font-bold tracking-[.18em] text-violet-600">SECTION {String(index + 1).padStart(2, "0")}</div><h3 className="mt-2 text-2xl font-semibold tracking-tight">{section.title}</h3><p className="mt-2 leading-7 text-zinc-600">{section.intro}</p>{section.lessons?.map((lesson, j) => <div key={j} className="mt-6 rounded-2xl border border-zinc-200 p-5"><div className="flex gap-3"><div className="grid size-8 shrink-0 place-items-center rounded-full border border-zinc-300 text-sm font-semibold">{j + 1}</div><div className="min-w-0"><div className="text-lg font-semibold">{lesson.title}</div><div className="mt-2 text-sm leading-6 text-zinc-600">{lesson.summary}</div><div className="mt-4 text-[10px] font-bold uppercase tracking-[.14em] text-zinc-400">Objective</div><div className="mt-1 text-sm text-zinc-700">{lesson.objective}</div>{lesson.keyPoints.length > 0 && <><div className="mt-4 text-[10px] font-bold uppercase tracking-[.14em] text-zinc-400">Key points</div><ul className="mt-2 space-y-1 text-sm text-zinc-600">{lesson.keyPoints.map((x, k) => <li key={k}>• {x}</li>)}</ul></>}{lesson.exercise && <div className="mt-4 rounded-xl bg-violet-50 p-4"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-violet-700">Practice</div><div className="mt-1 text-sm text-violet-950">{lesson.exercise}</div></div>}</div></div></div>)}{section.body?.map((x, j) => <p key={j} className="mt-5 text-[15px] leading-7 text-zinc-600">{x}</p>)}<div className="mt-5 rounded-xl bg-cyan-50 p-4"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-cyan-700">Key takeaways</div><ul className="mt-2 space-y-1 text-sm text-cyan-950">{section.keyTakeaways.map((x, j) => <li key={j}>• {x}</li>)}</ul></div></section>)}
-          <section className="mt-8"><div className="text-[10px] font-bold tracking-[.18em] text-violet-600">GLOSSARY</div>{doc.glossary.map((item, i) => <div key={i} className="mt-4"><div className="font-semibold">{item.term}</div><div className="mt-1 text-sm leading-6 text-zinc-600">{item.definition}</div></div>)}</section>
-        </article>
-      </section>}
-    </main>
-  </div>;
+        {loading && (
+          <div className="empty-state" style={{ marginTop: "2rem" }}>
+            <Loader2
+              size={32}
+              className="spin"
+              style={{ color: "var(--indigo-2)", display: "block", margin: "0 auto 1rem" }}
+            />
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: "0.375rem" }}>Generating artifact…</div>
+            <div style={{ fontSize: 13, color: "var(--muted)" }}>
+              Pulling transcripts, restructuring content, building your{" "}
+              <strong style={{ color: "var(--text)" }}>{format}</strong>.
+            </div>
+          </div>
+        )}
+
+        {doc && (
+          <section
+            id="output-section"
+            className="fade-up"
+            style={{
+              marginTop: "2rem",
+              display: "grid",
+              gap: "1.25rem",
+              gridTemplateColumns: "280px 1fr",
+              alignItems: "start",
+            }}
+          >
+            {/* ——— Sidebar ————————————————————— */}
+            <aside style={{ position: "sticky", top: "1.25rem" }}>
+              <div
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--line-2)",
+                  borderRadius: 14,
+                  padding: "1.25rem",
+                }}
+              >
+                <div className="doc-eyebrow" style={{ color: "var(--indigo-2)" }}>
+                  Generated
+                </div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 16,
+                    letterSpacing: "-0.02em",
+                    marginTop: "0.25rem",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {doc.title}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: "0.375rem", lineHeight: 1.6 }}>
+                  {doc.subtitle}
+                </div>
+
+                {/* Stats */}
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <div className="stat-cell">
+                    <div className="stat-num">{stats.sections}</div>
+                    <div className="stat-label">sections</div>
+                  </div>
+                  <div className="stat-cell">
+                    <div className="stat-num">{stats.lessons}</div>
+                    <div className="stat-label">lessons</div>
+                  </div>
+                  <div className="stat-cell">
+                    <div className="stat-num">{stats.sources}</div>
+                    <div className="stat-label">videos</div>
+                  </div>
+                </div>
+
+                {/* Meta */}
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    paddingTop: "1rem",
+                    borderTop: "1px solid var(--line)",
+                    display: "grid",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {[
+                    { label: "Audience", value: doc.audience },
+                    { label: "Read time", value: doc.estimatedTime },
+                    { label: "Source", value: doc.source.channel || doc.source.title || "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, color: "var(--subtle)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
+                        {label}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: "0.125rem", lineHeight: 1.5 }}>
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Export */}
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    paddingTop: "1rem",
+                    borderTop: "1px solid var(--line)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "var(--muted)",
+                      marginBottom: "0.625rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                    }}
+                  >
+                    <Download size={11} />
+                    Export
+                  </div>
+                  <div style={{ display: "grid", gap: "0.375rem" }}>
+                    {EXPORT_OPTIONS.map(({ format: fmt, label, Icon }) => (
+                      <button
+                        key={fmt}
+                        id={`export-${fmt}-btn`}
+                        className="export-btn"
+                        onClick={() => exportDocument(fmt)}
+                        disabled={Boolean(exporting)}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <Icon size={13} style={{ color: "var(--muted)" }} />
+                          {label}
+                        </span>
+                        {exporting === fmt ? (
+                          <Loader2 size={12} className="spin" />
+                        ) : (
+                          <Download size={12} style={{ color: "var(--subtle)" }} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Re-generate */}
+                <button
+                  id="regenerate-btn"
+                  type="button"
+                  onClick={() => { setDoc(null); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  style={{
+                    marginTop: "0.875rem",
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.375rem",
+                    padding: "0.6rem",
+                    border: "1px solid var(--line)",
+                    borderRadius: 9,
+                    background: "transparent",
+                    color: "var(--muted)",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    transition: "border-color 0.15s, color 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--line-2)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "var(--text)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--line)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)";
+                  }}
+                >
+                  <RotateCcw size={11} />
+                  New artifact
+                </button>
+              </div>
+            </aside>
+
+            {/* ——— Document article ————————————— */}
+            <article
+              className="doc-article"
+              style={{
+                borderRadius: 14,
+                padding: "2.5rem 3rem",
+                boxShadow: "0 1px 3px rgba(0,0,0,.07)",
+              }}
+            >
+              {/* Cover */}
+              <header style={{ paddingBottom: "1.75rem", borderBottom: "1px solid var(--doc-line)" }}>
+                <div className="doc-eyebrow">{doc.format}</div>
+                <h2 className="display-title" style={{ marginTop: "0.5rem" }}>
+                  {doc.title}
+                </h2>
+                <p style={{ marginTop: "0.625rem", fontSize: 16, color: "var(--doc-muted)", lineHeight: 1.65 }}>
+                  {doc.subtitle}
+                </p>
+                <div
+                  style={{
+                    marginTop: "1.25rem",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "0.75rem",
+                  }}
+                >
+                  {[
+                    { label: "Read time", value: doc.estimatedTime },
+                    { label: "Source", value: `${doc.source.videoCount} video${doc.source.videoCount !== 1 ? "s" : ""}` },
+                    { label: "Format", value: doc.format },
+                  ].map(({ label, value }) => (
+                    <div
+                      key={label}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.375rem",
+                        fontSize: 12,
+                        color: "var(--doc-muted)",
+                        background: "#f0eeeb",
+                        borderRadius: 6,
+                        padding: "0.3rem 0.625rem",
+                      }}
+                    >
+                      <span style={{ color: "#9b99a0" }}>{label}:</span>
+                      <span style={{ fontWeight: 500, color: "#3a3846" }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </header>
+
+              {/* Overview */}
+              <section style={{ marginTop: "1.75rem", paddingBottom: "1.75rem", borderBottom: "1px solid var(--doc-line)" }}>
+                <div className="doc-eyebrow">Overview</div>
+                <p style={{ fontSize: 15, lineHeight: 1.8, color: "#4b4f60", marginTop: "0.5rem" }}>{doc.summary}</p>
+
+                {doc.learningOutcomes.length > 0 && (
+                  <div style={{ marginTop: "1.25rem" }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#3a3846",
+                        marginBottom: "0.625rem",
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      Learning outcomes
+                    </div>
+                    <div style={{ display: "grid", gap: "0.375rem" }}>
+                      {doc.learningOutcomes.map((outcome, i) => (
+                        <div key={i} className="outcome-item">
+                          <Check
+                            size={14}
+                            style={{ color: "var(--doc-indigo)", marginTop: 2, flexShrink: 0 }}
+                          />
+                          {outcome}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Sections */}
+              {doc.sections.map((section, si) => (
+                <section
+                  key={si}
+                  style={{
+                    marginTop: "2.5rem",
+                    paddingBottom: "2rem",
+                    borderBottom: si < doc.sections.length - 1 ? "1px solid var(--doc-line)" : "none",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        marginTop: "0.125rem",
+                        width: 26,
+                        height: 26,
+                        borderRadius: 8,
+                        background: "rgba(71,54,212,.1)",
+                        border: "1px solid rgba(71,54,212,.2)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "var(--doc-indigo)",
+                      }}
+                    >
+                      {si + 1}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 className="section-heading">{section.title}</h3>
+                      <p style={{ marginTop: "0.5rem", fontSize: 14, lineHeight: 1.8, color: "#5b6070" }}>
+                        {section.intro}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Lessons */}
+                  {section.lessons?.map((lesson, li) => (
+                    <div key={li} className="lesson-card">
+                      <div style={{ display: "flex", gap: "0.875rem", alignItems: "flex-start" }}>
+                        <div
+                          style={{
+                            flexShrink: 0,
+                            width: 28,
+                            height: 28,
+                            borderRadius: "50%",
+                            border: "1.5px solid #d8d6d0",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#5b6070",
+                          }}
+                        >
+                          {li + 1}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 15, color: "var(--doc-text)", lineHeight: 1.3 }}>
+                            {lesson.title}
+                          </div>
+                          <p style={{ marginTop: "0.5rem", fontSize: 14, lineHeight: 1.75, color: "#5b6070" }}>
+                            {lesson.summary}
+                          </p>
+
+                          {lesson.objective && (
+                            <div style={{ marginTop: "1rem" }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.1em",
+                                  textTransform: "uppercase",
+                                  color: "#9b99a0",
+                                  marginBottom: "0.25rem",
+                                }}
+                              >
+                                Objective
+                              </div>
+                              <div style={{ fontSize: 13, color: "var(--doc-text)" }}>{lesson.objective}</div>
+                            </div>
+                          )}
+
+                          {lesson.keyPoints.length > 0 && (
+                            <div style={{ marginTop: "0.875rem" }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.1em",
+                                  textTransform: "uppercase",
+                                  color: "#9b99a0",
+                                  marginBottom: "0.375rem",
+                                }}
+                              >
+                                Key points
+                              </div>
+                              <ul style={{ paddingLeft: "1.25rem" }}>
+                                {lesson.keyPoints.map((pt, k) => (
+                                  <li key={k} style={{ fontSize: 13, color: "#5b6070", marginBottom: "0.25rem" }}>
+                                    {pt}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {lesson.examples.length > 0 && (
+                            <div style={{ marginTop: "0.875rem" }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.1em",
+                                  textTransform: "uppercase",
+                                  color: "#9b99a0",
+                                  marginBottom: "0.375rem",
+                                }}
+                              >
+                                Examples
+                              </div>
+                              <ul style={{ paddingLeft: "1.25rem" }}>
+                                {lesson.examples.map((ex, k) => (
+                                  <li key={k} style={{ fontSize: 13, color: "#5b6070", marginBottom: "0.25rem" }}>
+                                    {ex}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {lesson.exercise && (
+                            <div className="practice-box">
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.1em",
+                                  textTransform: "uppercase",
+                                  color: "var(--doc-indigo)",
+                                  marginBottom: "0.375rem",
+                                }}
+                              >
+                                Practice
+                              </div>
+                              <div style={{ fontSize: 13, color: "#3a3a5c", lineHeight: 1.7 }}>
+                                {lesson.exercise}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Body paragraphs (article/blog) */}
+                  {section.body?.map((para, pi) => (
+                    <p
+                      key={pi}
+                      style={{ marginTop: "1rem", fontSize: 15, lineHeight: 1.8, color: "#5b6070" }}
+                    >
+                      {para}
+                    </p>
+                  ))}
+
+                  {/* Key takeaways */}
+                  {section.keyTakeaways.length > 0 && (
+                    <div className="takeaway-box">
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          color: "#b45309",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
+                        Key takeaways
+                      </div>
+                      <ul style={{ paddingLeft: "1.125rem" }}>
+                        {section.keyTakeaways.map((pt, k) => (
+                          <li key={k} style={{ fontSize: 13, color: "#6b4f14", marginBottom: "0.25rem", lineHeight: 1.6 }}>
+                            {pt}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </section>
+              ))}
+
+              {/* Glossary */}
+              {doc.glossary.length > 0 && (
+                <section style={{ marginTop: "2.5rem", paddingTop: "1.75rem", borderTop: "1px solid var(--doc-line)" }}>
+                  <div className="doc-eyebrow">Glossary</div>
+                  <div style={{ marginTop: "1rem", display: "grid", gap: "1rem" }}>
+                    {doc.glossary.map((item, i) => (
+                      <div key={i} style={{ display: "flex", gap: "0.75rem" }}>
+                        <div
+                          style={{
+                            flexShrink: 0,
+                            width: 4,
+                            borderRadius: 2,
+                            background: "var(--doc-indigo)",
+                            opacity: 0.35,
+                            alignSelf: "stretch",
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--doc-text)" }}>{item.term}</div>
+                          <div style={{ fontSize: 13, color: "#5b6070", lineHeight: 1.65, marginTop: "0.25rem" }}>
+                            {item.definition}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Final checklist */}
+              {doc.finalChecklist.length > 0 && (
+                <section style={{ marginTop: "2rem", paddingTop: "1.75rem", borderTop: "1px solid var(--doc-line)" }}>
+                  <div className="doc-eyebrow">Final checklist</div>
+                  <div style={{ marginTop: "0.875rem", display: "grid", gap: "0.5rem" }}>
+                    {doc.finalChecklist.map((item, i) => (
+                      <div key={i} className="outcome-item">
+                        <CheckSquare
+                          size={14}
+                          style={{ color: "var(--doc-indigo)", marginTop: 2, flexShrink: 0 }}
+                        />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Footer */}
+              <footer
+                style={{
+                  marginTop: "2.5rem",
+                  paddingTop: "1.25rem",
+                  borderTop: "1px solid var(--doc-line)",
+                  fontSize: 11,
+                  color: "#9b99a0",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                }}
+              >
+                <span>Generated by CourseForge</span>
+                <span>{doc.generatedAt ? new Date(doc.generatedAt).toLocaleDateString() : ""}</span>
+              </footer>
+            </article>
+          </section>
+        )}
+      </main>
+    </div>
+  );
 }
+
