@@ -11,61 +11,64 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg:         #0a0808;
-  --bg-2:       #110d0d;
-  --surface:    #160e0e;
-  --surface-2:  #1e1212;
-  --glass:      rgba(22, 14, 14, 0.72);
-  --glass-2:    rgba(10, 8, 8, 0.55);
+  /* Pure black base — black is the dominant color */
+  --bg:         #080808;
+  --bg-2:       #0e0e0e;
+  --surface:    #131313;
+  --surface-2:  #1a1a1a;
+  --glass:      rgba(14, 14, 14, 0.85);
+  --glass-2:    rgba(8, 8, 8, 0.70);
 
   --line:       rgba(255, 255, 255, 0.06);
   --line-2:     rgba(255, 255, 255, 0.10);
-  --line-3:     rgba(255, 255, 255, 0.16);
+  --line-3:     rgba(255, 255, 255, 0.18);
 
-  --text:       #f2eded;
-  --text-2:     #c9bfbf;
-  --muted:      #7a6868;
-  --subtle:     #3d2e2e;
+  /* White text — always legible on black */
+  --text:       #ffffff;
+  --text-2:     #d1d1d1;
+  --muted:      #6b6b6b;
+  --subtle:     #333333;
 
-  /* Crimson accent */
+  /* Red — secondary accent only */
   --red:        #c0392b;
   --red-2:      #e63946;
   --red-3:      #ff6b6b;
-  --red-glow:   rgba(192, 57, 43, 0.22);
-  --red-dim:    rgba(192, 57, 43, 0.10);
-  --red-soft:   rgba(230, 57, 70, 0.06);
+  --red-glow:   rgba(192, 57, 43, 0.20);
+  --red-dim:    rgba(192, 57, 43, 0.09);
+  --red-soft:   rgba(192, 57, 43, 0.05);
 
-  /* Output doc surfaces — dark */
-  --doc-bg:     #110d0d;
-  --doc-surface: #1a1010;
-  --doc-text:   #ede8e8;
-  --doc-muted:  #9c8e8e;
-  --doc-line:   rgba(255, 255, 255, 0.08);
+  /* Output doc surfaces — dark (neutral black, red only for accents) */
+  --doc-bg:     #0e0e0e;
+  --doc-surface: #161616;
+  --doc-text:   #f0f0f0;
+  --doc-muted:  #888888;
+  --doc-line:   rgba(255, 255, 255, 0.07);
   --doc-red:    #e63946;
 
-  --panel-bg:   rgba(16, 10, 10, 0.88);
-  --field-bg:   rgba(6, 4, 4, 0.75);
+  /* Panel glass — pure dark, no reddish tint */
+  --panel-bg:   rgba(14, 14, 14, 0.92);
+  --field-bg:   rgba(0, 0, 0, 0.60);
 }
 
 /* ——— LIGHT ———————————————————————————————————— */
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg:         #faf8f8;
-  --bg-2:       #f4f0f0;
+  --bg:         #f5f5f5;
+  --bg-2:       #efefef;
   --surface:    #ffffff;
-  --surface-2:  #f9f4f4;
-  --glass:      rgba(255, 255, 255, 0.80);
-  --glass-2:    rgba(250, 248, 248, 0.65);
+  --surface-2:  #fafafa;
+  --glass:      rgba(255, 255, 255, 0.95);
+  --glass-2:    rgba(255, 255, 255, 0.80);
 
   --line:       rgba(0, 0, 0, 0.07);
-  --line-2:     rgba(0, 0, 0, 0.11);
-  --line-3:     rgba(0, 0, 0, 0.18);
+  --line-2:     rgba(0, 0, 0, 0.12);
+  --line-3:     rgba(0, 0, 0, 0.20);
 
-  --text:       #1a0e0e;
-  --text-2:     #3d2b2b;
-  --muted:      #8c6b6b;
-  --subtle:     #c9b0b0;
+  --text:       #111111;
+  --text-2:     #333333;
+  --muted:      #777777;
+  --subtle:     #bfbfbf;
 
   /* Deep red accent */
   --red:        #b91c1c;
@@ -77,14 +80,15 @@
 
   /* Output doc surfaces — light */
   --doc-bg:     #ffffff;
-  --doc-surface: #fdf5f5;
-  --doc-text:   #1a0e0e;
-  --doc-muted:  #6b4f4f;
+  --doc-surface: #fafafa;
+  --doc-text:   #111111;
+  --doc-muted:  #666666;
   --doc-line:   rgba(0, 0, 0, 0.08);
   --doc-red:    #b91c1c;
 
-  --panel-bg:   rgba(255, 255, 255, 0.90);
-  --field-bg:   rgba(250, 248, 248, 0.80);
+  /* Solid white panels */
+  --panel-bg:   #ffffff;
+  --field-bg:   #f5f5f5;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -117,7 +121,7 @@ body::before {
   background-size: 180px 180px;
 }
 
-/* Radial gradient atmosphere */
+/* Radial gradient atmosphere — very subtle, black dominates in dark mode */
 body::after {
   content: "";
   position: fixed;
@@ -125,8 +129,8 @@ body::after {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 70% 55% at 5% -5%, rgba(192, 57, 43, 0.12), transparent),
-    radial-gradient(ellipse 50% 40% at 95% 8%, rgba(192, 57, 43, 0.06), transparent);
+    radial-gradient(ellipse 60% 45% at 2% -8%, rgba(192, 57, 43, 0.055), transparent),
+    radial-gradient(ellipse 40% 35% at 98% 5%, rgba(192, 57, 43, 0.028), transparent);
 }
 
 [data-theme="light"] body::after {

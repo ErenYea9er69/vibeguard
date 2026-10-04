@@ -289,7 +289,7 @@ export default function Builder() {
             >
               {/* Source panel */}
               <div
-                              style={{
+                style={{
                   background: "var(--panel-bg)",
                   border: "1px solid var(--line-2)",
                   borderRadius: 14,
@@ -412,11 +412,12 @@ export default function Builder() {
               {/* Settings panel */}
               <div
                 style={{
-                  background: "rgba(7,10,18,.75)",
+                  background: "var(--panel-bg)",
                   border: "1px solid var(--line-2)",
                   borderRadius: 14,
                   padding: "1.25rem",
                   backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
                 }}
               >
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.75rem" }}>
