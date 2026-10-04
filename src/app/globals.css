@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bg: #06070b;
+  --panel: #0b0d13;
+  --line: rgba(255,255,255,.09);
+  --muted: #8b91a1;
+  --text: #f4f6fb;
+  --accent: #7c5cff;
+  --accent-2: #22d3ee;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(124,92,255,.12), transparent 30%),
+    radial-gradient(circle at 90% 10%, rgba(34,211,238,.08), transparent 26%),
+    var(--bg);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+button, input, select, textarea { font: inherit; }
+::selection { background: rgba(124,92,255,.35); }
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.glow {
+  box-shadow: 0 0 60px rgba(124,92,255,.12);
+}
+
+.prose-course h1 { font-size: 2.8rem; line-height: 1.05; letter-spacing: -.04em; }
+.prose-course h2 { font-size: 1.35rem; margin-top: 2rem; }
+.prose-course h3 { font-size: 1rem; margin-top: 1.5rem; }
+.prose-course p { color: #b7bdcb; line-height: 1.8; }
+.prose-course li { color: #b7bdcb; line-height: 1.7; }
+
+@media print {
+  body { background: #fff; color: #111; }
+}

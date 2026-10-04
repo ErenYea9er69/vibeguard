@@ -1,0 +1,83 @@
+import { GeneratedDocument } from "./types";
+
+function escapeHtml(input: string) {
+  return input.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
+}
+
+export function renderHtml(doc: GeneratedDocument) {
+  const sections = doc.sections.map((section, index) => `
+    <section class="section">
+      <div class="eyebrow">SECTION ${String(index + 1).padStart(2, "0")}</div>
+      <h2>${escapeHtml(section.title)}</h2>
+      <p class="intro">${escapeHtml(section.intro)}</p>
+      ${section.lessons?.map((lesson, lessonIndex) => `
+        <article class="lesson">
+          <div class="lesson-number">${lessonIndex + 1}</div>
+          <div>
+            <h3>${escapeHtml(lesson.title)}</h3>
+            <p><strong>Objective:</strong> ${escapeHtml(lesson.objective)}</p>
+            <p>${escapeHtml(lesson.summary)}</p>
+            ${lesson.keyPoints.length ? `<h4>Key points</h4><ul>${lesson.keyPoints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}
+            ${lesson.examples.length ? `<h4>Examples</h4><ul>${lesson.examples.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}
+            ${lesson.exercise ? `<div class="exercise"><strong>Practice</strong><p>${escapeHtml(lesson.exercise)}</p></div>` : ""}
+          </div>
+        </article>
+      `).join("") || ""}
+      ${section.body?.map(p => `<p>${escapeHtml(p)}</p>`).join("") || ""}
+      ${section.keyTakeaways.length ? `<div class="takeaways"><h4>Key takeaways</h4><ul>${section.keyTakeaways.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+    </section>`).join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(doc.title)}</title>
+<style>
+@page { size: A4; margin: 18mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #16181d; font-family: Inter, Arial, sans-serif; line-height: 1.7; background: #f4f5f7; }
+main { max-width: 820px; margin: 0 auto; background: #fff; padding: 52px; }
+.cover { padding: 42px 0 60px; border-bottom: 2px solid #111; }
+.kicker,.eyebrow { color: #6f43ff; font-size: 12px; letter-spacing: .18em; font-weight: 700; }
+h1 { font-size: 44px; line-height: 1.05; margin: 14px 0 18px; letter-spacing: -.04em; }
+h2 { font-size: 27px; line-height: 1.15; margin: 8px 0 10px; }
+h3 { font-size: 19px; margin: 0 0 8px; }
+h4 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; margin: 20px 0 6px; }
+p { margin: 8px 0; }
+.muted { color: #737984; }
+.meta { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 26px; }
+.meta div { border: 1px solid #e4e6ea; border-radius: 12px; padding: 12px; font-size: 12px; }
+.section { margin-top: 48px; break-inside: avoid; }
+.intro { font-size: 17px; color: #545b67; }
+.lesson { display: grid; grid-template-columns: 42px 1fr; gap: 18px; margin: 25px 0; }
+.lesson-number { width: 32px; height: 32px; border: 1px solid #111; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+ul { padding-left: 18px; }
+li { margin: 4px 0; }
+.exercise,.takeaways { margin-top: 18px; padding: 14px 16px; background: #f5f2ff; border-left: 3px solid #6f43ff; }
+.takeaways { background: #f2fbff; border-left-color: #00a4c8; }
+.small { font-size: 12px; }
+@media print { body { background:#fff; } main { padding:0; } }
+</style>
+</head>
+<body>
+<main>
+<section class="cover">
+<div class="kicker">COURSEFORGE EXPORT</div>
+<h1>${escapeHtml(doc.title)}</h1>
+<p class="muted">${escapeHtml(doc.subtitle)}</p>
+<div class="meta">
+<div><strong>Format</strong><br/>${escapeHtml(doc.format)}</div>
+<div><strong>Audience</strong><br/>${escapeHtml(doc.audience)}</div>
+<div><strong>Estimated time</strong><br/>${escapeHtml(doc.estimatedTime)}</div>
+</div>
+<p class="small muted" style="margin-top:22px">Source: ${escapeHtml(doc.source.title || doc.source.url)} · ${doc.source.videoCount} video(s)</p>
+</section>
+<section class="section"><div class="eyebrow">OVERVIEW</div><p>${escapeHtml(doc.summary)}</p><h3>Learning outcomes</h3><ul>${doc.learningOutcomes.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></section>
+${sections}
+<section class="section"><div class="eyebrow">GLOSSARY</div>${doc.glossary.map(x => `<p><strong>${escapeHtml(x.term)}</strong><br/>${escapeHtml(x.definition)}</p>`).join("")}</section>
+<section class="section"><div class="eyebrow">FINAL CHECKLIST</div><ul>${doc.finalChecklist.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></section>
+</main>
+</body>
+</html>`;
+}
