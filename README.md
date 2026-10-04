@@ -79,3 +79,13 @@ The useful product layer is not the summary. The product value sits in the trans
 source detection → transcript normalization → concept extraction → deduplication → curriculum design → lesson generation → exercises → source traceability → polished exports.
 
 A strong version should preserve links to original videos, show which video supports each section, allow the user to edit the generated artifact, and keep a reproducible generation record.
+
+## Studio (in-app creation)
+
+The result view now has five tabs: Read, Analysis, AI design, Quiz, Flashcards.
+
+- Analysis: `/api/analyze` scores each video, weights concepts, lists gaps and repeated material.
+- AI design: `/api/studio` with `kind: "design"` asks Gemini for a full interactive HTML page in one of four styles (editorial, workbook, dashboard, slides). The page opens in a sandboxed iframe. Without a Gemini key, `src/lib/design-fallback.ts` builds the page.
+- Quiz and flashcards: `/api/studio` with `kind: "kit"`.
+- Skill prompts live in `src/lib/skills.ts`: UI design, analysis, and study. Edit them to change how the AI behaves.
+- Downloads remain under "Download copy" in the sidebar.

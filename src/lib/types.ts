@@ -51,3 +51,21 @@ export type GeneratedDocument = {
   finalChecklist: string[];
   generatedAt: string;
 };
+
+export type Analysis = {
+  topic: string;
+  level: "beginner" | "intermediate" | "advanced";
+  readingMinutes: number;
+  prerequisites: string[];
+  concepts: Array<{ name: string; weight: number; dependsOn: string[]; videoIds: string[] }>;
+  coverage: Array<{ videoId: string; title: string; score: number; note: string }>;
+  gaps: string[];
+  redundancy: string[];
+  recommendedFormat: OutputFormat;
+  verdict: string;
+};
+
+export type QuizQuestion = { question: string; options: string[]; answerIndex: number; explanation: string; sourceVideoId?: string };
+export type Flashcard = { front: string; back: string };
+export type StudyKit = { quiz: QuizQuestion[]; flashcards: Flashcard[] };
+export type DesignStyle = "editorial" | "workbook" | "dashboard" | "slides";

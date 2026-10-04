@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Studio, { StudioTab } from "./Studio";
 import {
   ArrowRight,
   BookOpen,
@@ -72,6 +73,7 @@ export default function Builder() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [strictRules, setStrictRules] = useState(true);
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [tab, setTab] = useState<"read" | StudioTab>("read");
 
   useEffect(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem("cf-theme")) as "dark" | "light" | null;
@@ -114,6 +116,7 @@ export default function Builder() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed.");
       setDoc(data);
+      setTab("read");
       setTimeout(() => {
         document.getElementById("output-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
@@ -829,7 +832,7 @@ export default function Builder() {
                     }}
                   >
                     <Download size={11} />
-                    Export
+                    Download copy
                   </div>
                   <div style={{ display: "grid", gap: "0.375rem" }}>
                     {EXPORT_OPTIONS.map(({ format: fmt, label, Icon }) => (
@@ -891,7 +894,14 @@ export default function Builder() {
             </aside>
 
             {/* ——— Document article ————————————— */}
-            <article
+            <div style={{ minWidth: 0 }}>
+              <div className="studio-tabs" role="tablist">
+                {([["read", "Read"], ["analysis", "Analysis"], ["design", "AI design"], ["quiz", "Quiz"], ["cards", "Flashcards"]] as const).map(([id, label]) => (
+                  <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{label}</button>
+                ))}
+              </div>
+              {tab === "read" ? (
+                <article
               className="doc-article"
               style={{
                 borderRadius: 14,
@@ -1222,6 +1232,10 @@ export default function Builder() {
                 <span>{doc.generatedAt ? new Date(doc.generatedAt).toLocaleDateString() : ""}</span>
               </footer>
             </article>
+              ) : (
+                <Studio key={tab} tab={tab} doc={doc} sourceUrl={sourceUrl || "https://www.youtube.com/playlist?list=DEMO"} language={language} maxVideos={maxVideos} />
+              )}
+            </div>
           </section>
         )}
 
