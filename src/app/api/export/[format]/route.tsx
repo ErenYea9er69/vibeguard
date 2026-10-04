@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ for
 
   if (format === "pdf") {
     const buffer = await renderToBuffer(<CoursePdf doc={doc} />);
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="courseforge.pdf"` }
     });
   }
