@@ -13,7 +13,8 @@ const requestSchema = z.object({
   audience: z.string().min(2),
   tone: z.enum(["clear", "technical", "academic", "practical"]),
   language: z.string().min(2),
-  maxVideos: z.number().int().min(1).max(30)
+  maxVideos: z.number().int().min(1).max(30),
+  strictRules: z.boolean().optional().default(true)
 });
 
 export async function POST(request: Request) {
@@ -39,7 +40,8 @@ export async function POST(request: Request) {
       format: body.format,
       audience: body.audience,
       tone: body.tone,
-      language: body.language
+      language: body.language,
+      strictRules: body.strictRules
     });
     return NextResponse.json(document);
   } catch (error) {

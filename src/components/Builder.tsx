@@ -18,11 +18,13 @@ import {
   PenLine,
   Play,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
   Sun,
   X,
 } from "lucide-react";
 import { GeneratedDocument, OutputFormat, Tone } from "@/lib/types";
+import { WRITING_RULES_ITEMS, BANNED_WORDS } from "@/lib/rules";
 
 const FORMAT_PRESETS = {
   course: {
@@ -68,6 +70,8 @@ export default function Builder() {
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [strictRules, setStrictRules] = useState(true);
+  const [showRulesModal, setShowRulesModal] = useState(false);
 
   useEffect(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem("cf-theme")) as "dark" | "light" | null;
@@ -104,6 +108,7 @@ export default function Builder() {
           audience,
           language,
           maxVideos,
+          strictRules,
         }),
       });
       const data = await res.json();
@@ -548,6 +553,80 @@ export default function Builder() {
                   </div>
                 </div>
 
+                {/* AI Writing Rules & Quality Controls */}
+                <div
+                  style={{
+                    marginTop: "1.125rem",
+                    padding: "0.75rem 0.875rem",
+                    borderRadius: 10,
+                    background: "var(--field-bg)",
+                    border: "1px solid var(--line-2)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <label
+                      htmlFor="strict-rules-toggle"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        cursor: "pointer",
+                        userSelect: "none",
+                      }}
+                    >
+                      <input
+                        id="strict-rules-toggle"
+                        type="checkbox"
+                        checked={strictRules}
+                        onChange={(e) => setStrictRules(e.target.checked)}
+                        style={{
+                          accentColor: "var(--red)",
+                          width: 14,
+                          height: 14,
+                          cursor: "pointer",
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
+                          Strict Writing Rules
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                          {strictRules ? "19 rules • 64 banned words" : "Standard output without rules"}
+                        </div>
+                      </div>
+                    </label>
+
+                    <button
+                      type="button"
+                      id="view-rules-btn"
+                      onClick={() => setShowRulesModal(true)}
+                      style={{
+                        padding: "0.25rem 0.5rem",
+                        fontSize: 10.5,
+                        fontWeight: 500,
+                        color: "var(--red-2)",
+                        background: "var(--red-dim)",
+                        border: "1px solid rgba(192,57,43,0.3)",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                      }}
+                    >
+                      <ShieldCheck size={11} />
+                      Inspect rules
+                    </button>
+                  </div>
+                </div>
+
                 {/* CTA */}
                 <button
                   id="build-artifact-btn"
@@ -841,6 +920,7 @@ export default function Builder() {
                     { label: "Read time", value: doc.estimatedTime },
                     { label: "Source", value: `${doc.source.videoCount} video${doc.source.videoCount !== 1 ? "s" : ""}` },
                     { label: "Format", value: doc.format },
+                    { label: "Editorial Rules", value: "Anti-Fluff Shield Active" },
                   ].map(({ label, value }) => (
                     <div key={label} className="cover-chip">
                       <span>{label}:</span>
@@ -1144,6 +1224,239 @@ export default function Builder() {
             </article>
           </section>
         )}
+
+      {/* ——— Writing Rules Inspection Modal ————————————————————————————— */}
+      {showRulesModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+          onClick={() => setShowRulesModal(false)}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--line-2)",
+              borderRadius: 16,
+              maxWidth: 720,
+              width: "100%",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              boxShadow: "0 24px 48px rgba(0,0,0,0.45)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div
+              style={{
+                padding: "1.25rem 1.5rem",
+                borderBottom: "1px solid var(--line)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 9,
+                    background: "var(--red-dim)",
+                    border: "1px solid rgba(192,57,43,0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--red)",
+                  }}
+                >
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
+                    AI Editorial Writing Rules
+                  </h3>
+                  <p style={{ margin: "0.15rem 0 0", fontSize: 12, color: "var(--muted)" }}>
+                    Injected into Gemini system instructions and enforced across all generated content
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="close-rules-modal-btn"
+                onClick={() => setShowRulesModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--muted)",
+                  cursor: "pointer",
+                  padding: 6,
+                  borderRadius: 6,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal content */}
+            <div
+              style={{
+                padding: "1.25rem 1.5rem",
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
+            >
+              {/* 19 Rules */}
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--red-2)",
+                    marginBottom: "0.625rem",
+                  }}
+                >
+                  19 Core Writing Rules
+                </div>
+                <div style={{ display: "grid", gap: "0.35rem" }}>
+                  {WRITING_RULES_ITEMS.map((rule, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: "0.5rem",
+                        fontSize: 12.5,
+                        lineHeight: 1.5,
+                        padding: "0.4rem 0.6rem",
+                        borderRadius: 6,
+                        background: "var(--field-bg)",
+                        color: "var(--text)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "var(--red)",
+                          fontVariantNumeric: "tabular-nums",
+                          minWidth: 18,
+                        }}
+                      >
+                        {String(idx + 1).padStart(2, "0")}
+                      </span>
+                      <span>{rule}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 64 Banned Words */}
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "var(--red-2)",
+                    }}
+                  >
+                    {BANNED_WORDS.length} Banned Words & Phrases
+                  </div>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                    Zero tolerance in any form or tense
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "0.375rem",
+                    maxHeight: 180,
+                    overflowY: "auto",
+                    padding: "0.625rem",
+                    background: "var(--field-bg)",
+                    border: "1px solid var(--line-2)",
+                    borderRadius: 8,
+                  }}
+                >
+                  {BANNED_WORDS.map((word) => (
+                    <span
+                      key={word}
+                      style={{
+                        fontSize: 11,
+                        padding: "0.2rem 0.45rem",
+                        borderRadius: 4,
+                        background: "var(--surface)",
+                        border: "1px solid var(--line)",
+                        color: "var(--muted)",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {word}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div
+              style={{
+                padding: "0.875rem 1.5rem",
+                borderTop: "1px solid var(--line)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "var(--panel-bg)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: 11.5, color: "var(--muted)" }}>
+                <Check size={13} style={{ color: "var(--red)" }} />
+                <span>Active enforcement enabled on next generation</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRulesModal(false)}
+                className="btn-primary"
+                style={{ padding: "0.45rem 1rem", fontSize: 12 }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </main>
     </div>
   );

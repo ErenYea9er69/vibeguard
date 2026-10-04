@@ -54,6 +54,38 @@ const schema = {
   required: ["title", "subtitle", "format", "audience", "estimatedTime", "summary", "learningOutcomes", "sections", "glossary", "finalChecklist"]
 };
 
+import { WRITING_RULES_PROMPT, BANNED_WORDS } from "./rules";
+
+export { WRITING_RULES_PROMPT, BANNED_WORDS };
+
+function cleanText(text: string): string {
+  if (typeof text !== "string") return text;
+  return text
+    .replace(/[\u2014\u2013]/g, ", ")
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+    .replace(/[*#]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+,/g, ",")
+    .trim();
+}
+
+function sanitizeDocument<T>(value: T): T {
+  if (typeof value === "string") {
+    return cleanText(value) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeDocument) as unknown as T;
+  }
+  if (value !== null && typeof value === "object") {
+    const res: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      res[k] = sanitizeDocument(v);
+    }
+    return res as T;
+  }
+  return value;
+}
+
 export async function generateDocument(args: {
   videos: SourceVideo[];
   sourceUrl: string;
@@ -64,6 +96,7 @@ export async function generateDocument(args: {
   audience: string;
   tone: Tone;
   language: string;
+  strictRules?: boolean;
 }): Promise<GeneratedDocument> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
@@ -76,12 +109,26 @@ export async function generateDocument(args: {
 
   if (!prepared.trim()) throw new Error("No usable transcripts were found for this source.");
 
-  const prompt = `You are CourseForge, a senior instructional designer and technical editor. Transform the provided YouTube material into a coherent ${args.format}. Preserve factual meaning. Do not invent facts that the source does not support. Resolve repetition, remove filler, and reorder ideas when this creates a better learning sequence.\n\nOutput format: ${args.format}\nAudience: ${args.audience}\nTone: ${args.tone}\nLanguage: ${args.language}\n\nFor course output, organize sections into lessons with objectives, key points, examples, and an exercise when the source provides enough material. For article or blog output, use body paragraphs and still preserve useful takeaways. Include sourceVideoIds so each major section remains traceable.\n\nSOURCE MATERIAL:\n${prepared}`;
+  const applyRules = args.strictRules !== false;
+  const rulesSection = applyRules ? `\n\n${WRITING_RULES_PROMPT}` : "";
+
+  const prompt = `You are CourseForge, a senior instructional designer and technical editor. Transform the provided YouTube material into a coherent ${args.format}. Preserve factual meaning. Do not invent facts that the source does not support. Resolve repetition, remove filler, and reorder ideas when this creates a better learning sequence.
+
+Output format: ${args.format}
+Audience: ${args.audience}
+Tone: ${args.tone}
+Language: ${args.language}
+
+For course output, organize sections into lessons with objectives, key points, examples, and an exercise when the source provides enough material. For article or blog output, use body paragraphs and still preserve useful takeaways. Include sourceVideoIds so each major section remains traceable.${rulesSection}
+
+SOURCE MATERIAL:
+${prepared}`;
 
   const response = await ai.models.generateContent({
     model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
     contents: prompt,
     config: {
+      ...(applyRules ? { systemInstruction: WRITING_RULES_PROMPT } : {}),
       responseMimeType: "application/json",
       responseSchema: schema,
       temperature: 0.25,
@@ -91,7 +138,8 @@ export async function generateDocument(args: {
 
   const raw = response.text?.trim();
   if (!raw) throw new Error("The model returned an empty response.");
-  const parsed = JSON.parse(raw) as Omit<GeneratedDocument, "source" | "generatedAt">;
+  const parsedJson = JSON.parse(raw);
+  const parsed = (applyRules ? sanitizeDocument(parsedJson) : parsedJson) as Omit<GeneratedDocument, "source" | "generatedAt">;
 
   return {
     ...parsed,
