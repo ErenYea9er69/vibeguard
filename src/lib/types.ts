@@ -1,5 +1,8 @@
 export type OutputFormat = "course" | "article" | "blog";
+export type DeliverableFormat = "html" | "pdf" | "markdown" | "json";
 export type Tone = "clear" | "technical" | "academic" | "practical";
+export type DesignStyle = "editorial" | "workbook" | "dashboard" | "slides";
+export type DesignStyleOption = "auto" | DesignStyle;
 
 export type SourceVideo = {
   id: string;
@@ -35,6 +38,7 @@ export type GeneratedDocument = {
   title: string;
   subtitle: string;
   format: OutputFormat;
+  deliverableFormat?: DeliverableFormat;
   audience: string;
   estimatedTime: string;
   source: {
@@ -50,6 +54,8 @@ export type GeneratedDocument = {
   glossary: Array<{ term: string; definition: string }>;
   finalChecklist: string[];
   generatedAt: string;
+  generatedHtml?: string;
+  generatedMarkdown?: string;
 };
 
 export type Analysis = {
@@ -68,4 +74,3 @@ export type Analysis = {
 export type QuizQuestion = { question: string; options: string[]; answerIndex: number; explanation: string; sourceVideoId?: string };
 export type Flashcard = { front: string; back: string };
 export type StudyKit = { quiz: QuizQuestion[]; flashcards: Flashcard[] };
-export type DesignStyle = "editorial" | "workbook" | "dashboard" | "slides";

@@ -9,6 +9,7 @@ import {
   CheckSquare,
   ChevronDown,
   ChevronRight,
+  Copy,
   Download,
   FileCode2,
   FileText,
@@ -24,31 +25,68 @@ import {
   Sun,
   X,
 } from "lucide-react";
-import { GeneratedDocument, OutputFormat, Tone } from "@/lib/types";
+import { DeliverableFormat, DesignStyleOption, GeneratedDocument, OutputFormat, Tone } from "@/lib/types";
 import { WRITING_RULES_ITEMS, BANNED_WORDS } from "@/lib/rules";
+import { renderMarkdown } from "@/lib/render";
 
-const FORMAT_PRESETS = {
-  course: {
-    label: "Course",
-    Icon: BookOpen,
-    desc: "Lessons, objectives, examples, exercises",
+const DELIVERABLE_PRESETS = {
+  html: {
+    label: "HTML Webpage",
+    badge: "Bespoke UI Skill",
+    Icon: Globe,
+    desc: "Self-contained webpage with custom UI tailored to the topic",
   },
+  pdf: {
+    label: "PDF Document",
+    badge: "Printable / Clean",
+    Icon: FileText,
+    desc: "Formatted PDF ready to read, print, or share",
+  },
+  markdown: {
+    label: "Markdown (.md)",
+    badge: "Notes & Docs",
+    Icon: FileCode2,
+    desc: "Clean markdown for Obsidian, Notion, or blog posts",
+  },
+  json: {
+    label: "JSON Data",
+    badge: "Full Schema",
+    Icon: FileCode2,
+    desc: "Structured schema with traceable source video IDs",
+  },
+} as const;
+
+const CONTENT_PRESETS = {
   article: {
     label: "Article",
     Icon: Newspaper,
-    desc: "Structured long-form reading",
+    desc: "Structured long-form reading with deep dives & takeaways",
   },
   blog: {
-    label: "Blog",
+    label: "Blog Post",
     Icon: PenLine,
-    desc: "Scannable sections and takeaways",
+    desc: "Scannable sections, fast highlights, and takeaways",
+  },
+  course: {
+    label: "Course",
+    Icon: BookOpen,
+    desc: "Lessons, objectives, examples, practice tasks",
   },
 } satisfies Record<OutputFormat, { label: string; Icon: typeof BookOpen; desc: string }>;
 
+const UI_STYLE_OPTIONS: Array<{ id: DesignStyleOption; label: string; desc: string }> = [
+  { id: "auto", label: "Auto-Adaptive (Frontend Skill)", desc: "Analyzes topic to craft tailored palette, type & layout" },
+  { id: "editorial", label: "Editorial Magazine", desc: "Long-form reading with typography hierarchy & contents bar" },
+  { id: "workbook", label: "Interactive Workbook", desc: "Checkable tasks and reveal-on-click exercise answers" },
+  { id: "dashboard", label: "Modern Dashboard", desc: "Modular developer components & live glossary search" },
+  { id: "slides", label: "Slide Deck", desc: "Keyboard-driven presentation deck" },
+];
+
 const EXPORT_OPTIONS = [
-  { format: "pdf" as const, label: "PDF document", Icon: FileText },
-  { format: "html" as const, label: "HTML file", Icon: Globe },
-  { format: "json" as const, label: "JSON data", Icon: FileCode2 },
+  { format: "html" as const, label: "HTML file (.html)", Icon: Globe },
+  { format: "pdf" as const, label: "PDF document (.pdf)", Icon: FileText },
+  { format: "markdown" as const, label: "Markdown (.md)", Icon: FileCode2 },
+  { format: "json" as const, label: "JSON data (.json)", Icon: FileCode2 },
 ];
 
 const SAMPLE_URLS = [
@@ -59,7 +97,9 @@ const SAMPLE_URLS = [
 
 export default function Builder() {
   const [sourceUrl, setSourceUrl] = useState("");
-  const [format, setFormat] = useState<OutputFormat>("course");
+  const [deliverableFormat, setDeliverableFormat] = useState<DeliverableFormat>("html");
+  const [format, setFormat] = useState<OutputFormat>("article");
+  const [designStyle, setDesignStyle] = useState<DesignStyleOption>("auto");
   const [tone, setTone] = useState<Tone>("practical");
   const [audience, setAudience] = useState("");
   const [language, setLanguage] = useState("en");
@@ -71,7 +111,9 @@ export default function Builder() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [strictRules, setStrictRules] = useState(true);
   const [showRulesModal, setShowRulesModal] = useState(false);
-  const [tab, setTab] = useState<"read" | StudioTab>("read");
+  const [tab, setTab] = useState<"design" | "read" | "markdown" | "quiz" | "cards" | "analysis" | "json">("design");
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const inputType = useMemo(() => {
     const trimmed = sourceUrl.trim();
@@ -121,7 +163,9 @@ export default function Builder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sourceUrl: sourceUrl.trim(),
+          deliverableFormat,
           format,
+          designStyle,
           tone,
           audience: audience.trim(),
           language,
@@ -132,7 +176,18 @@ export default function Builder() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed.");
       setDoc(data);
-      setTab("read");
+
+      // Automatically switch to the matching deliverable tab
+      if (deliverableFormat === "html") {
+        setTab("design");
+      } else if (deliverableFormat === "markdown") {
+        setTab("markdown");
+      } else if (deliverableFormat === "json") {
+        setTab("json");
+      } else {
+        setTab("read");
+      }
+
       setTimeout(() => {
         document.getElementById("output-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
@@ -143,7 +198,7 @@ export default function Builder() {
     }
   }
 
-  async function exportDocument(fmt: "pdf" | "html" | "json") {
+  async function exportDocument(fmt: "pdf" | "html" | "json" | "markdown") {
     if (!doc) return;
     setExporting(fmt);
     try {
@@ -156,8 +211,14 @@ export default function Builder() {
       const blob = await res.blob();
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
+      const slug = (doc.title || "artifact")
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 48) || "courseforge";
       anchor.href = href;
-      anchor.download = `courseforge.${fmt}`;
+      anchor.download = `${slug}.${fmt === "markdown" ? "md" : fmt}`;
       anchor.click();
       URL.revokeObjectURL(href);
     } catch (e) {
@@ -165,6 +226,21 @@ export default function Builder() {
     } finally {
       setExporting("");
     }
+  }
+
+  function copyMarkdown() {
+    if (!doc) return;
+    const md = doc.generatedMarkdown || renderMarkdown(doc);
+    navigator.clipboard.writeText(md);
+    setCopiedMd(true);
+    setTimeout(() => setCopiedMd(false), 2000);
+  }
+
+  function copyJson() {
+    if (!doc) return;
+    navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
+    setCopiedJson(true);
+    setTimeout(() => setCopiedJson(false), 2000);
   }
 
   return (
@@ -425,14 +501,69 @@ export default function Builder() {
                   ))}
                 </div>
 
-                {/* Format cards */}
+                {/* 1. Deliverable format */}
                 <div style={{ marginTop: "1.25rem" }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.625rem" }}>
-                    Output format
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+                      1. Deliverable format
+                    </div>
+                    <span style={{ fontSize: 10, color: "var(--red-2)", fontWeight: 500 }}>
+                      Target output file
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(2, 1fr)" }}>
+                    {(Object.keys(DELIVERABLE_PRESETS) as DeliverableFormat[]).map((key) => {
+                      const { label, badge, Icon, desc } = DELIVERABLE_PRESETS[key];
+                      const active = deliverableFormat === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          id={`deliverable-${key}`}
+                          onClick={() => setDeliverableFormat(key)}
+                          className={`fmt-card${active ? " active" : ""}`}
+                          style={{ padding: "0.75rem 0.875rem" }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                            <Icon
+                              size={15}
+                              style={{ color: active ? "var(--red-2)" : "var(--muted)" }}
+                            />
+                            <span
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 600,
+                                padding: "1px 5px",
+                                borderRadius: 4,
+                                background: active ? "var(--red-dim)" : "rgba(255,255,255,0.05)",
+                                color: active ? "var(--red-2)" : "var(--muted)",
+                                border: `1px solid ${active ? "rgba(192,57,43,0.3)" : "var(--line)"}`,
+                              }}
+                            >
+                              {badge}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: "0.2rem" }}>{label}</div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.4 }}>{desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Content structure */}
+                <div style={{ marginTop: "1rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+                      2. Content structure
+                    </div>
+                    <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                      Format & depth
+                    </span>
                   </div>
                   <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(3, 1fr)" }}>
-                    {(Object.keys(FORMAT_PRESETS) as OutputFormat[]).map((key) => {
-                      const { label, Icon, desc } = FORMAT_PRESETS[key];
+                    {(Object.keys(CONTENT_PRESETS) as OutputFormat[]).map((key) => {
+                      const { label, Icon, desc } = CONTENT_PRESETS[key];
                       const active = format === key;
                       return (
                         <button
@@ -443,16 +574,64 @@ export default function Builder() {
                           className={`fmt-card${active ? " active" : ""}`}
                         >
                           <Icon
-                            size={15}
-                            style={{ color: active ? "var(--red-2)" : "var(--muted)", marginBottom: "0.5rem" }}
+                            size={14}
+                            style={{ color: active ? "var(--red-2)" : "var(--muted)", marginBottom: "0.375rem" }}
                           />
-                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: "0.25rem" }}>{label}</div>
-                          <div style={{ fontSize: 10.5, color: "var(--muted)", lineHeight: 1.5 }}>{desc}</div>
+                          <div style={{ fontSize: 11.5, fontWeight: 600, marginBottom: "0.2rem" }}>{label}</div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.4 }}>{desc}</div>
                         </button>
                       );
                     })}
                   </div>
                 </div>
+
+                {/* 3. HTML UI Aesthetic (When Deliverable is HTML) */}
+                {deliverableFormat === "html" && (
+                  <div
+                    style={{
+                      marginTop: "1rem",
+                      padding: "0.75rem 0.875rem",
+                      borderRadius: 10,
+                      background: "var(--field-bg)",
+                      border: "1px solid var(--line-2)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.375rem" }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>
+                        UI Aesthetic (Frontend Design Skill)
+                      </span>
+                      <span style={{ fontSize: 9.5, color: "var(--red-2)", fontWeight: 500 }}>
+                        Grounds UI in subject
+                      </span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        id="design-style-select"
+                        value={designStyle}
+                        onChange={(e) => setDesignStyle(e.target.value as DesignStyleOption)}
+                        className="field"
+                        style={{ fontSize: 12, paddingRight: "2rem" }}
+                      >
+                        {UI_STYLE_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label} — {opt.desc}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={13}
+                        style={{
+                          position: "absolute",
+                          right: "0.75rem",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "var(--muted)",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Settings panel */}
@@ -925,18 +1104,54 @@ export default function Builder() {
                     style={{
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--muted)",
-                      marginBottom: "0.625rem",
+                      color: "var(--text)",
+                      marginBottom: "0.5rem",
                       display: "flex",
                       alignItems: "center",
                       gap: "0.375rem",
                     }}
                   >
-                    <Download size={11} />
-                    Download copy
+                    <Download size={11} style={{ color: "var(--red-2)" }} />
+                    Download Deliverable
+                  </div>
+
+                  {/* Primary deliverable download */}
+                  <button
+                    type="button"
+                    id="primary-download-btn"
+                    onClick={() => exportDocument(deliverableFormat)}
+                    disabled={Boolean(exporting)}
+                    style={{
+                      width: "100%",
+                      padding: "0.625rem 0.75rem",
+                      borderRadius: 9,
+                      background: "var(--red)",
+                      color: "#fff",
+                      border: "none",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      boxShadow: "0 2px 8px rgba(192,57,43,0.35)",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    {exporting === deliverableFormat ? (
+                      <Loader2 size={13} className="spin" />
+                    ) : (
+                      <Download size={13} />
+                    )}
+                    Save {deliverableFormat === "html" ? "HTML Page (.html)" : deliverableFormat === "pdf" ? "PDF Document (.pdf)" : deliverableFormat === "markdown" ? "Markdown (.md)" : "JSON Data (.json)"}
+                  </button>
+
+                  <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: "0.375rem" }}>
+                    Other formats:
                   </div>
                   <div style={{ display: "grid", gap: "0.375rem" }}>
-                    {EXPORT_OPTIONS.map(({ format: fmt, label, Icon }) => (
+                    {EXPORT_OPTIONS.filter((opt) => opt.format !== deliverableFormat).map(({ format: fmt, label, Icon }) => (
                       <button
                         key={fmt}
                         id={`export-${fmt}-btn`}
@@ -994,11 +1209,29 @@ export default function Builder() {
               </div>
             </aside>
 
-            {/* ——— Document article ————————————— */}
+            {/* ——— Document article & tabs ————————————— */}
             <div style={{ minWidth: 0 }}>
               <div className="studio-tabs" role="tablist">
-                {([["read", "Read"], ["analysis", "Analysis"], ["design", "AI design"], ["quiz", "Quiz"], ["cards", "Flashcards"]] as const).map(([id, label]) => (
-                  <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{label}</button>
+                {([
+                  ["design", "Live HTML", Globe],
+                  ["read", "Reading View", BookOpen],
+                  ["markdown", "Markdown", FileCode2],
+                  ["quiz", "Quiz", Sparkles],
+                  ["cards", "Flashcards", CheckSquare],
+                  ["analysis", "Analysis", ShieldCheck],
+                  ["json", "JSON Data", FileCode2],
+                ] as const).map(([id, label, TabIcon]) => (
+                  <button
+                    key={id}
+                    role="tab"
+                    aria-selected={tab === id}
+                    className={tab === id ? "on" : ""}
+                    onClick={() => setTab(id as typeof tab)}
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}
+                  >
+                    <TabIcon size={12} />
+                    {label}
+                  </button>
                 ))}
               </div>
               {tab === "read" ? (
@@ -1333,8 +1566,118 @@ export default function Builder() {
                 <span>{doc.generatedAt ? new Date(doc.generatedAt).toLocaleDateString() : ""}</span>
               </footer>
             </article>
+              ) : tab === "markdown" ? (
+                <div
+                  style={{
+                    background: "var(--surface)",
+                    border: "1px solid var(--line-2)",
+                    borderRadius: 14,
+                    padding: "1.75rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "1rem",
+                      flexWrap: "wrap",
+                      gap: "0.75rem",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Markdown Document</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: "0.2rem" }}>
+                        Clean markdown text ready for Obsidian, Notion, or blog static site generators
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button type="button" className="chip on" onClick={copyMarkdown}>
+                        {copiedMd ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy Markdown</>}
+                      </button>
+                      <button type="button" className="chip" onClick={() => exportDocument("markdown")}>
+                        <Download size={12} /> Download .md
+                      </button>
+                    </div>
+                  </div>
+                  <pre
+                    style={{
+                      maxHeight: "75vh",
+                      overflow: "auto",
+                      padding: "1.25rem",
+                      borderRadius: 10,
+                      background: "var(--field-bg)",
+                      border: "1px solid var(--line-2)",
+                      fontSize: 12.5,
+                      fontFamily: "ui-monospace, monospace",
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-wrap",
+                      color: "var(--text-2)",
+                    }}
+                  >
+                    <code>{doc.generatedMarkdown || renderMarkdown(doc)}</code>
+                  </pre>
+                </div>
+              ) : tab === "json" ? (
+                <div
+                  style={{
+                    background: "var(--surface)",
+                    border: "1px solid var(--line-2)",
+                    borderRadius: 14,
+                    padding: "1.75rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "1rem",
+                      flexWrap: "wrap",
+                      gap: "0.75rem",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Structured JSON Payload</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: "0.2rem" }}>
+                        Complete schema with learning outcomes, sections, and source traceability
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button type="button" className="chip on" onClick={copyJson}>
+                        {copiedJson ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy JSON</>}
+                      </button>
+                      <button type="button" className="chip" onClick={() => exportDocument("json")}>
+                        <Download size={12} /> Download .json
+                      </button>
+                    </div>
+                  </div>
+                  <pre
+                    style={{
+                      maxHeight: "75vh",
+                      overflow: "auto",
+                      padding: "1.25rem",
+                      borderRadius: 10,
+                      background: "var(--field-bg)",
+                      border: "1px solid var(--line-2)",
+                      fontSize: 12,
+                      fontFamily: "ui-monospace, monospace",
+                      lineHeight: 1.5,
+                      color: "var(--text-2)",
+                    }}
+                  >
+                    <code>{JSON.stringify(doc, null, 2)}</code>
+                  </pre>
+                </div>
               ) : (
-                <Studio key={tab} tab={tab} doc={doc} sourceUrl={sourceUrl || "https://www.youtube.com/playlist?list=DEMO"} language={language} maxVideos={maxVideos} />
+                <Studio
+                  key={tab}
+                  tab={tab as StudioTab}
+                  doc={doc}
+                  sourceUrl={sourceUrl || "https://www.youtube.com/playlist?list=DEMO"}
+                  language={language}
+                  maxVideos={maxVideos}
+                />
               )}
             </div>
           </section>

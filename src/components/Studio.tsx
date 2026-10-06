@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Maximize2, RefreshCw, Sparkles } from "lucide-react";
-import { Analysis, DesignStyle, GeneratedDocument, StudyKit } from "@/lib/types";
+import {
+  Check,
+  Code2,
+  Download,
+  ExternalLink,
+  Loader2,
+  Maximize2,
+  Monitor,
+  RefreshCw,
+  Smartphone,
+  Sparkles,
+  Tablet,
+} from "lucide-react";
+import { Analysis, DesignStyle, DesignStyleOption, GeneratedDocument, StudyKit } from "@/lib/types";
 
 export type StudioTab = "analysis" | "design" | "quiz" | "cards";
 type Props = { tab: StudioTab; doc: GeneratedDocument; sourceUrl: string; language: string; maxVideos: number };
@@ -68,45 +80,219 @@ function AnalysisPanel({ doc, sourceUrl, language, maxVideos }: Omit<Props, "tab
   );
 }
 
-const STYLES: Array<{ id: DesignStyle; label: string; hint: string }> = [
-  { id: "editorial", label: "Editorial", hint: "Long read with a contents bar" },
-  { id: "workbook", label: "Workbook", hint: "Tasks you check off" },
-  { id: "dashboard", label: "Dashboard", hint: "Progress and glossary search" },
-  { id: "slides", label: "Slides", hint: "Arrow key deck" }
+const STYLES: Array<{ id: DesignStyleOption; label: string; hint: string }> = [
+  { id: "auto", label: "Auto (Subject Skill)", hint: "Bespoke palette, type, and layout grounded in the topic" },
+  { id: "editorial", label: "Editorial", hint: "Long read with typographic hierarchy and sticky contents bar" },
+  { id: "workbook", label: "Workbook", hint: "Interactive checklist and exercise answer reveals" },
+  { id: "dashboard", label: "Dashboard", hint: "Progress tracker and real-time glossary filter" },
+  { id: "slides", label: "Slides", hint: "Arrow key presentation deck" },
 ];
 
 function DesignPanel({ doc }: { doc: GeneratedDocument }) {
-  const [style, setStyle] = useState<DesignStyle>("editorial");
-  const [html, setHtml] = useState("");
-  const [engine, setEngine] = useState("");
+  const [style, setStyle] = useState<DesignStyleOption>("auto");
+  const [html, setHtml] = useState<string>(doc.generatedHtml || "");
+  const [engine, setEngine] = useState<string>(doc.generatedHtml ? "ai" : "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [viewport, setViewport] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [viewCode, setViewCode] = useState(false);
+  const [copied, setCopied] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
 
-  async function build(next: DesignStyle) {
-    setStyle(next); setBusy(true); setErr("");
+  async function build(next: DesignStyleOption) {
+    setStyle(next);
+    setBusy(true);
+    setErr("");
     try {
       const r = await post<{ html: string; engine: string }>("/api/studio", { kind: "design", style: next, doc });
-      setHtml(r.html); setEngine(r.engine);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Design failed."); }
-    finally { setBusy(false); }
+      setHtml(r.html);
+      setEngine(r.engine);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Design failed.");
+    } finally {
+      setBusy(false);
+    }
   }
-  useEffect(() => { build("editorial"); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [doc]);
+
+  useEffect(() => {
+    if (doc.generatedHtml) {
+      setHtml(doc.generatedHtml);
+      setEngine("ai");
+      setStyle("auto");
+    } else {
+      build("auto");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc]);
+
+  function downloadHtml() {
+    if (!html) return;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const slug = (doc.title || "artifact")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "page";
+    a.href = url;
+    a.download = `${slug}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openNewTab() {
+    if (!html) return;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  }
+
+  function copyCode() {
+    if (!html) return;
+    navigator.clipboard.writeText(html);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const frameWidth = viewport === "mobile" ? "375px" : viewport === "tablet" ? "768px" : "100%";
 
   return (
     <div>
-      <div className="studio-toolbar">
-        {STYLES.map(s => (
-          <button key={s.id} className={`chip ${style === s.id ? "on" : ""}`} onClick={() => build(s.id)} disabled={busy} title={s.hint}>{s.label}</button>
+      <div className="studio-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+        {STYLES.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`chip ${style === s.id ? "on" : ""}`}
+            onClick={() => build(s.id)}
+            disabled={busy}
+            title={s.hint}
+          >
+            {s.label}
+          </button>
         ))}
+
         <span className="grow" />
-        <span className="muted-s">{engine === "ai" ? "Designed by AI" : engine ? "Built from the template" : ""}</span>
-        <button className="chip" onClick={() => build(style)} disabled={busy} title="Generate another version"><RefreshCw size={12} /> Redo</button>
-        <button className="chip" onClick={() => frame.current?.requestFullscreen?.()} disabled={!html}><Maximize2 size={12} /> Full screen</button>
+
+        <span className="muted-s" style={{ marginRight: "0.25rem" }}>
+          {engine === "ai" ? "Frontend Skill (AI)" : engine ? "Template" : ""}
+        </span>
+
+        {/* Viewport switchers */}
+        <div style={{ display: "flex", gap: "2px", background: "var(--surface)", border: "1px solid var(--line-2)", borderRadius: 8, padding: 2 }}>
+          <button
+            type="button"
+            className="chip"
+            style={{ padding: "4px 8px", border: "none", background: viewport === "desktop" ? "var(--red-dim)" : "transparent" }}
+            onClick={() => setViewport("desktop")}
+            title="Desktop view (100%)"
+          >
+            <Monitor size={13} />
+          </button>
+          <button
+            type="button"
+            className="chip"
+            style={{ padding: "4px 8px", border: "none", background: viewport === "tablet" ? "var(--red-dim)" : "transparent" }}
+            onClick={() => setViewport("tablet")}
+            title="Tablet view (768px)"
+          >
+            <Tablet size={13} />
+          </button>
+          <button
+            type="button"
+            className="chip"
+            style={{ padding: "4px 8px", border: "none", background: viewport === "mobile" ? "var(--red-dim)" : "transparent" }}
+            onClick={() => setViewport("mobile")}
+            title="Mobile view (375px)"
+          >
+            <Smartphone size={13} />
+          </button>
+        </div>
+
+        {/* Code toggle */}
+        <button
+          type="button"
+          className={`chip ${viewCode ? "on" : ""}`}
+          onClick={() => setViewCode(!viewCode)}
+          title="Toggle HTML source code"
+        >
+          <Code2 size={13} /> {viewCode ? "Preview" : "Code"}
+        </button>
+
+        {/* Download HTML */}
+        <button type="button" className="chip on" onClick={downloadHtml} disabled={!html} title="Download standalone HTML file">
+          <Download size={13} /> Save .html
+        </button>
+
+        <button type="button" className="chip" onClick={openNewTab} disabled={!html} title="Open in new window">
+          <ExternalLink size={13} />
+        </button>
+
+        <button type="button" className="chip" onClick={() => build(style)} disabled={busy} title="Generate another version">
+          <RefreshCw size={12} className={busy ? "spin" : ""} /> Redo
+        </button>
+
+        <button type="button" className="chip" onClick={() => frame.current?.requestFullscreen?.()} disabled={!html} title="Fullscreen">
+          <Maximize2 size={12} />
+        </button>
       </div>
+
       {err && <div className="studio-err">{err}</div>}
-      {busy ? <Busy label="Designing the page" /> : (
-        <iframe ref={frame} title="AI designed course" className="studio-frame" sandbox="allow-scripts" srcDoc={html} />
+
+      {busy ? (
+        <Busy label="Analyzing subject & crafting bespoke UI with Frontend Skill…" />
+      ) : viewCode ? (
+        <div style={{ position: "relative", marginTop: "0.5rem" }}>
+          <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10 }}>
+            <button type="button" className="chip on" onClick={copyCode}>
+              {copied ? <><Check size={12} /> Copied</> : "Copy code"}
+            </button>
+          </div>
+          <pre
+            style={{
+              maxHeight: "75vh",
+              overflow: "auto",
+              padding: "1.25rem",
+              borderRadius: 12,
+              background: "var(--field-bg)",
+              border: "1px solid var(--line-2)",
+              fontSize: 12,
+              fontFamily: "ui-monospace, monospace",
+              color: "var(--text-2)",
+              lineHeight: 1.5,
+            }}
+          >
+            <code>{html}</code>
+          </pre>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            width: "100%",
+            background: viewport !== "desktop" ? "rgba(0,0,0,0.15)" : "transparent",
+            padding: viewport !== "desktop" ? "1.25rem 0" : 0,
+            borderRadius: 12,
+            transition: "all 0.2s",
+          }}
+        >
+          <iframe
+            ref={frame}
+            title="AI designed course"
+            className="studio-frame"
+            sandbox="allow-scripts"
+            srcDoc={html}
+            style={{
+              width: frameWidth,
+              maxWidth: "100%",
+              boxShadow: viewport !== "desktop" ? "0 10px 30px rgba(0,0,0,0.4)" : "none",
+              transition: "width 0.25s ease",
+            }}
+          />
+        </div>
       )}
     </div>
   );

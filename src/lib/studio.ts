@@ -75,12 +75,39 @@ export async function generateStudyKit(doc: GeneratedDocument): Promise<StudyKit
   return { quiz: kit.quiz.filter(q => q.options[q.answerIndex] !== undefined), flashcards: kit.flashcards };
 }
 
-export async function generateDesign(doc: GeneratedDocument, style: DesignStyle): Promise<{ html: string; engine: "ai" | "fallback" }> {
-  if (!hasGemini()) return { html: renderDesignFallback(doc, style), engine: "fallback" };
+export async function generateDesign(
+  doc: GeneratedDocument,
+  style: DesignStyle | "auto" = "auto"
+): Promise<{ html: string; engine: "ai" | "fallback" }> {
+  const fallbackStyle: DesignStyle = style === "auto" ? (doc.format === "course" ? "workbook" : "editorial") : style;
+  if (!hasGemini()) return { html: renderDesignFallback(doc, fallbackStyle), engine: "fallback" };
+
+  const styleBrief = style === "auto"
+    ? `Style direction: SUBJECT-ADAPTIVE. Analyze the subject matter ("${doc.title}"), domain, audience, and format (${doc.format}). Apply the Frontend Design Skill to craft a bespoke visual identity, typography pairing with Google Fonts, tailored 4-6 hex color system, and layout specific to this topic.`
+    : `Layout brief: ${STYLE_BRIEFS[style] || "Clean responsive layout"}`;
+
+  const formatDirective = doc.format === "article"
+    ? "Format: Long-form article. Create an engaging, beautifully typeset article reading experience with sticky table of contents, reading progress indicator, key takeaways, and pull quotes."
+    : doc.format === "blog"
+    ? "Format: Modern blog post. Create a punchy, highly readable blog format with scannable headers, takeaway cards, and interactive highlights."
+    : "Format: Interactive course. Create an organized course with module/lesson navigation, exercise reveals, and progress tracking.";
+
   const text = await askText({
     system: `${UI_DESIGN_SKILL}\n${BASE_RULES}`,
-    prompt: `Build one self-contained HTML file for this course. Inline all CSS and JS. No external scripts, images, or network calls. Google Fonts links are allowed.\nLayout brief: ${STYLE_BRIEFS[style]}\nUse only the course content below. Keep sourceVideoIds visible as source tags. Return only the HTML document.\n\nCOURSE JSON:\n${JSON.stringify(doc)}`
+    prompt: `Build one self-contained, beautifully styled HTML file for this ${doc.format}.
+${formatDirective}
+${styleBrief}
+
+Requirements:
+- Inline all CSS inside <style> and all JS inside <script>. No external scripts, no external images.
+- Google Fonts <link> tags in <head> are allowed and recommended.
+- Responsive down to 360px mobile.
+- Use only the content provided in the JSON below. Keep sourceVideoIds visible as source tags.
+- Return ONLY the HTML document starting with <!doctype html>.
+
+CONTENT JSON:
+${JSON.stringify(doc)}`
   });
   const html = extractHtml(text);
-  return html ? { html, engine: "ai" } : { html: renderDesignFallback(doc, style), engine: "fallback" };
+  return html ? { html, engine: "ai" } : { html: renderDesignFallback(doc, fallbackStyle), engine: "fallback" };
 }

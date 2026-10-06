@@ -8,7 +8,7 @@ export const maxDuration = 300;
 
 const schema = z.object({
   kind: z.enum(["kit", "design"]),
-  style: z.enum(["editorial", "workbook", "dashboard", "slides"]).default("editorial"),
+  style: z.enum(["auto", "editorial", "workbook", "dashboard", "slides"]).default("auto"),
   doc: z.any()
 });
 
