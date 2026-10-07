@@ -1,5 +1,5 @@
 import { Analysis, DesignStyle, GeneratedDocument, SourceVideo, StudyKit } from "./types";
-import { askJson, askText, extractHtml, hasGemini } from "./gemini";
+import { askJson, askText, extractHtml, hasOpenRouter } from "./openrouter";
 import { ANALYSIS_SKILL, BASE_RULES, STUDY_SKILL, STYLE_BRIEFS, UI_DESIGN_SKILL } from "./skills";
 import { renderDesignFallback } from "./design-fallback";
 
@@ -46,7 +46,7 @@ export function analyzeFromDocument(doc: GeneratedDocument): Analysis {
 }
 
 export async function analyzeSource(videos: SourceVideo[], doc?: GeneratedDocument): Promise<Analysis> {
-  if (!hasGemini() || !videos.some(v => v.transcript.trim())) {
+  if (!hasOpenRouter() || !videos.some(v => v.transcript.trim())) {
     if (!doc) throw new Error("Nothing to analyze.");
     return analyzeFromDocument(doc);
   }
@@ -70,7 +70,7 @@ function kitFromDocument(doc: GeneratedDocument): StudyKit {
 }
 
 export async function generateStudyKit(doc: GeneratedDocument): Promise<StudyKit> {
-  if (!hasGemini()) return kitFromDocument(doc);
+  if (!hasOpenRouter()) return kitFromDocument(doc);
   const kit = await askJson<StudyKit>({ system: `${STUDY_SKILL}\n${BASE_RULES}`, prompt: `Create 8 quiz questions and 12 flashcards.\n\nCOURSE JSON:\n${JSON.stringify(doc)}`, schema: kitSchema });
   return { quiz: kit.quiz.filter(q => q.options[q.answerIndex] !== undefined), flashcards: kit.flashcards };
 }
@@ -80,7 +80,7 @@ export async function generateDesign(
   style: DesignStyle | "auto" = "auto"
 ): Promise<{ html: string; engine: "ai" | "fallback" }> {
   const fallbackStyle: DesignStyle = style === "auto" ? (doc.format === "course" ? "workbook" : "editorial") : style;
-  if (!hasGemini()) return { html: renderDesignFallback(doc, fallbackStyle), engine: "fallback" };
+  if (!hasOpenRouter()) return { html: renderDesignFallback(doc, fallbackStyle), engine: "fallback" };
 
   const styleBrief = style === "auto"
     ? `Style direction: SUBJECT-ADAPTIVE. Analyze the subject matter ("${doc.title}"), domain, audience, and format (${doc.format}). Apply the Frontend Design Skill to craft a bespoke visual identity, typography pairing with Google Fonts, tailored 4-6 hex color system, and layout specific to this topic.`

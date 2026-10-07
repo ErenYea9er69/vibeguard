@@ -111,10 +111,10 @@ export async function POST(request: Request) {
             emitProgress(
               3,
               70,
-              "Synthesizing Curriculum with Gemini AI",
+              "Synthesizing Curriculum with Nemotron AI",
               `Structuring concepts, lessons, takeaways & exercises into a ${body.format}`,
               "ai",
-              "Gemini AI synthesized modular learning structure and concept hierarchy",
+              "Nemotron AI synthesized modular learning structure and concept hierarchy",
               "success"
             );
 
@@ -185,8 +185,8 @@ export async function POST(request: Request) {
           }
 
           // ——— REAL GENERATION ——————————————————————
-          if (!process.env.GEMINI_API_KEY) {
-            throw new Error("GEMINI_API_KEY is not configured in .env. Please set your Gemini API key.");
+          if (!process.env.OPENROUTER_API_KEY) {
+            throw new Error("OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use nvidia/nemotron-3-ultra-550b-a55b:free.");
           }
 
           // Step 1 & 2: Source Discovery & Transcripts
@@ -269,14 +269,14 @@ export async function POST(request: Request) {
             "success"
           );
 
-          // Step 3: Gemini AI Synthesis
+          // Step 3: Nemotron AI Synthesis
           emitProgress(
             3,
             60,
-            "Synthesizing Curriculum with Gemini AI",
-            `Sending ${totalWordsExtracted.toLocaleString()} words to Gemini 2.5 Flash for instructional synthesis...`,
+            "Synthesizing Curriculum with Nemotron AI",
+            `Sending ${totalWordsExtracted.toLocaleString()} words to NVIDIA Nemotron 3 Ultra for instructional synthesis...`,
             "ai",
-            `Sending ${totalWordsExtracted.toLocaleString()} words to Gemini AI for instructional analysis`,
+            `Sending ${totalWordsExtracted.toLocaleString()} words to Nemotron AI for instructional analysis`,
             "info"
           );
 
@@ -297,7 +297,7 @@ export async function POST(request: Request) {
               emitProgress(
                 3,
                 72,
-                "Synthesizing Curriculum with Gemini AI",
+                "Synthesizing Curriculum with Nemotron AI",
                 aiInfo.message,
                 "ai",
                 aiInfo.message,
@@ -312,7 +312,7 @@ export async function POST(request: Request) {
             "Curriculum Synthesized",
             `Generated ${document.sections.length} module sections with key takeaways and exercises`,
             "ai",
-            `Gemini AI synthesis complete: ${document.sections.length} sections created`,
+            `Nemotron AI synthesis complete: ${document.sections.length} sections created`,
             "success"
           );
 
@@ -434,8 +434,8 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured in .env. Please set your Gemini API key.");
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use nvidia/nemotron-3-ultra-550b-a55b:free.");
     }
 
     const source = await getSourceVideos(body.sourceUrl, body.maxVideos, body.language);

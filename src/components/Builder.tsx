@@ -482,7 +482,7 @@ export default function Builder() {
             }}
           >
             <Sparkles size={11} />
-            Powered by Gemini
+            Powered by Nemotron 3 Ultra
           </div>
           <button
             type="button"
@@ -1903,7 +1903,7 @@ export default function Builder() {
                     AI Editorial Writing Rules
                   </h3>
                   <p style={{ margin: "0.15rem 0 0", fontSize: 12, color: "var(--muted)" }}>
-                    Injected into Gemini system instructions and enforced across all generated content
+                    Injected into Nemotron AI system instructions and enforced across all generated content
                   </p>
                 </div>
               </div>

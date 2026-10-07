@@ -1,5 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
 import { GeneratedDocument, OutputFormat, SourceVideo, Tone } from "./types";
+import { askOpenRouterJson, hasOpenRouter, getOpenRouterModel } from "./openrouter";
+import { WRITING_RULES_PROMPT, BANNED_WORDS } from "./rules";
+
+export { WRITING_RULES_PROMPT, BANNED_WORDS };
 
 const schema = {
   type: "object",
@@ -54,10 +57,6 @@ const schema = {
   required: ["title", "subtitle", "format", "audience", "estimatedTime", "summary", "learningOutcomes", "sections", "glossary", "finalChecklist"]
 };
 
-import { WRITING_RULES_PROMPT, BANNED_WORDS } from "./rules";
-
-export { WRITING_RULES_PROMPT, BANNED_WORDS };
-
 function cleanText(text: string): string {
   if (typeof text !== "string") return text;
   return text
@@ -106,10 +105,6 @@ export async function generateDocument(
   },
   onProgress?: AiProgressCallback
 ): Promise<GeneratedDocument> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
-  const ai = new GoogleGenAI({ apiKey });
-
   const prepared = args.videos
     .filter(v => v.transcript.trim())
     .map(v => `VIDEO_ID: ${v.id}\nTITLE: ${v.title}\nDESCRIPTION: ${v.description || ""}\nTRANSCRIPT:\n${v.transcript.slice(0, 16000)}`)
@@ -121,7 +116,7 @@ export async function generateDocument(
 
   onProgress?.({
     stage: "preparing",
-    message: `Prepared ${totalWords.toLocaleString()} words across ${args.videos.length} video(s) for Gemini synthesis`
+    message: `Prepared ${totalWords.toLocaleString()} words across ${args.videos.length} video(s) for AI synthesis`
   });
 
   const applyRules = args.strictRules !== false;
@@ -147,43 +142,26 @@ For course output, organize sections into lessons with objectives, key points, e
 SOURCE MATERIAL:
 ${prepared}`;
 
-  let response;
-  let lastError: unknown;
-  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  if (!hasOpenRouter()) {
+    throw new Error(
+      "OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use nvidia/nemotron-3-ultra-550b-a55b:free."
+    );
+  }
 
+  const modelName = getOpenRouterModel();
   onProgress?.({
     stage: "synthesizing",
-    message: `Gemini AI (${modelName}) is structuring concepts, lessons & practical exercises...`
+    message: `NVIDIA Nemotron 3 Ultra (${modelName}) is structuring concepts, lessons & practical exercises...`
   });
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      response = await ai.models.generateContent({
-        model: modelName,
-        contents: prompt,
-        config: {
-          ...(applyRules ? { systemInstruction: WRITING_RULES_PROMPT } : {}),
-          responseMimeType: "application/json",
-          responseSchema: schema,
-          temperature: 0.25,
-          maxOutputTokens: 12000
-        }
-      });
-      if (response?.text?.trim()) break;
-    } catch (err) {
-      lastError = err;
-      if (attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
-      }
-    }
-  }
+  const parsedJson = await askOpenRouterJson({
+    system: `You are CourseForge, a senior instructional designer. Return ONLY a valid JSON object matching the requested schema. ${rulesSection}`,
+    prompt: `${prompt}\n\nTarget JSON Schema Structure:\n${JSON.stringify(schema, null, 2)}`,
+    model: modelName,
+    schema,
+    maxTokens: 16000
+  });
 
-  const raw = response?.text?.trim();
-  if (!raw) {
-    const errMsg = lastError instanceof Error ? lastError.message : "The model returned an empty response.";
-    throw new Error(errMsg);
-  }
-  const parsedJson = JSON.parse(raw);
   const parsed = (applyRules ? sanitizeDocument(parsedJson) : parsedJson) as Omit<GeneratedDocument, "source" | "generatedAt">;
 
   return {
