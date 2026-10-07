@@ -124,14 +124,47 @@ async function fetchDirectPlaylist(playlistId: string, maxVideos: number, langua
   }
 
   // Extract video IDs from initial data JSON in page
-  const videoIds = Array.from(new Set(Array.from(html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)).map(m => m[1])))
-    .slice(0, Math.max(1, maxVideos));
+  let videoIds = Array.from(new Set(Array.from(html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)).map(m => m[1])));
 
-  if (!videoIds.length) {
+  // If "all" videos requested (maxVideos === 0) or maxVideos > videoIds.length, try continuation token if present
+  const wantsAll = maxVideos === 0;
+  const wantsMore = wantsAll || (maxVideos > 0 && videoIds.length < maxVideos);
+  if (wantsMore) {
+    const contMatch = html.match(/"continuationCommand":\{"token":"([^"]+)"/);
+    if (contMatch && contMatch[1]) {
+      try {
+        const postRes = await fetch("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Cookie": "SOCS=CAESEwgDEgk2NDIyNDM3NjcaAmVuIAEaBgiA_LyaBg",
+          },
+          body: JSON.stringify({
+            continuation: contMatch[1],
+            context: { client: { clientName: "WEB", clientVersion: "2.20231219.00.00" } }
+          })
+        });
+        if (postRes.ok) {
+          const contData = await postRes.text();
+          const nextIds = Array.from(new Set(Array.from(contData.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)).map(m => m[1])));
+          videoIds = Array.from(new Set([...videoIds, ...nextIds]));
+        }
+      } catch (err) {
+        console.warn("Failed to fetch playlist continuation:", err);
+      }
+    }
+  }
+
+  const selectedIds = (!wantsAll && maxVideos > 0)
+    ? videoIds.slice(0, maxVideos)
+    : videoIds;
+
+  if (!selectedIds.length) {
     throw new Error("No videos found in this playlist. Please check that the playlist is public.");
   }
 
-  const videos = await mapWithConcurrency(videoIds, 4, async (id: string) => {
+  const videos = await mapWithConcurrency(selectedIds, 6, async (id: string) => {
     return fetchDirectVideo(id, language);
   });
 
@@ -192,16 +225,18 @@ export async function getSourceVideos(
     };
   }
 
-  // Playlist handling
-  const playlistMax = Math.max(1, Math.min(maxVideos || 12, 30));
+  // Playlist handling: maxVideos === 0 means all videos in the playlist
+  const isAll = maxVideos === 0;
+  const playlistMax = isAll ? 0 : Math.max(1, maxVideos || 12);
 
   if (process.env.SUPADATA_API_KEY) {
     try {
       const playlist = await supadata(`/youtube/playlist?id=${encodeURIComponent(parsed.id)}`);
-      const idsData = await supadata(`/youtube/playlist/videos?id=${encodeURIComponent(parsed.id)}&limit=${playlistMax}`);
-      const ids = (idsData.videoIds || []).slice(0, playlistMax);
+      const limit = isAll ? 100 : playlistMax;
+      const idsData = await supadata(`/youtube/playlist/videos?id=${encodeURIComponent(parsed.id)}&limit=${limit}`);
+      const ids = isAll ? (idsData.videoIds || []) : (idsData.videoIds || []).slice(0, playlistMax);
 
-      const videos = await mapWithConcurrency(ids, 4, async (id: string) => {
+      const videos = await mapWithConcurrency(ids, 6, async (id: string) => {
         const url = `https://www.youtube.com/watch?v=${id}`;
         try {
           const [metadata, transcript] = await Promise.all([

@@ -104,6 +104,7 @@ export default function Builder() {
   const [audience, setAudience] = useState("");
   const [language, setLanguage] = useState("en");
   const [maxVideos, setMaxVideos] = useState(12);
+  const [isAllVideos, setIsAllVideos] = useState(false);
   const [doc, setDoc] = useState<GeneratedDocument | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -132,6 +133,9 @@ export default function Builder() {
     return "unknown";
   }, [sourceUrl]);
 
+  const isSingleVideo = inputType === "video" || inputType === "video-in-playlist";
+  const effectiveMaxVideos = isSingleVideo ? 1 : (isAllVideos ? 0 : maxVideos);
+
   useEffect(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem("cf-theme")) as "dark" | "light" | null;
     if (saved === "light" || saved === "dark") setTheme(saved);
@@ -157,7 +161,6 @@ export default function Builder() {
     setError("");
     setLoading(true);
     try {
-      const isSingleVideo = inputType === "video" || inputType === "video-in-playlist";
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,7 +172,7 @@ export default function Builder() {
           tone,
           audience: audience.trim(),
           language,
-          maxVideos: isSingleVideo ? 1 : maxVideos,
+          maxVideos: effectiveMaxVideos,
           strictRules,
         }),
       });
@@ -792,46 +795,70 @@ export default function Builder() {
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
-                          {maxVideos} videos
+                          {isAllVideos ? "All videos" : `${maxVideos} video${maxVideos === 1 ? "" : "s"}`}
                         </span>
                       </div>
                       <input
                         id="max-videos-range"
                         type="range"
                         min="1"
-                        max="30"
-                        value={maxVideos}
-                        onChange={(e) => setMaxVideos(Number(e.target.value))}
+                        max="100"
+                        value={isAllVideos ? 100 : maxVideos}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (val >= 100) {
+                            setIsAllVideos(true);
+                          } else {
+                            setIsAllVideos(false);
+                            setMaxVideos(val);
+                          }
+                        }}
                       />
                       {/* Semi-auto quick presets */}
                       <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.375rem" }}>
                         {[
-                          { label: "1 (single)", value: 1 },
-                          { label: "5 vids", value: 5 },
-                          { label: "12 vids", value: 12 },
-                          { label: "20 vids", value: 20 },
-                          { label: "All (30)", value: 30 },
-                        ].map((preset) => (
-                          <button
-                            key={preset.value}
-                            type="button"
-                            onClick={() => setMaxVideos(preset.value)}
-                            style={{
-                              flex: 1,
-                              padding: "0.2rem 0",
-                              fontSize: 10,
-                              fontWeight: maxVideos === preset.value ? 700 : 500,
-                              color: maxVideos === preset.value ? "var(--text)" : "var(--muted)",
-                              background: maxVideos === preset.value ? "var(--red-dim)" : "var(--field-bg)",
-                              border: maxVideos === preset.value ? "1px solid var(--red-2)" : "1px solid var(--line)",
-                              borderRadius: 4,
-                              cursor: "pointer",
-                            }}
-                          >
-                            {preset.label}
-                          </button>
-                        ))}
+                          { label: "1 (single)", value: 1, isAll: false },
+                          { label: "5 vids", value: 5, isAll: false },
+                          { label: "12 vids", value: 12, isAll: false },
+                          { label: "20 vids", value: 20, isAll: false },
+                          { label: "All", value: 0, isAll: true },
+                        ].map((preset) => {
+                          const isSelected = preset.isAll ? isAllVideos : (!isAllVideos && maxVideos === preset.value);
+                          return (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => {
+                                if (preset.isAll) {
+                                  setIsAllVideos(true);
+                                } else {
+                                  setIsAllVideos(false);
+                                  setMaxVideos(preset.value);
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: "0.2rem 0",
+                                fontSize: 10,
+                                fontWeight: isSelected ? 700 : 500,
+                                color: isSelected ? "var(--text)" : "var(--muted)",
+                                background: isSelected ? "var(--red-dim)" : "var(--field-bg)",
+                                border: isSelected ? "1px solid var(--red-2)" : "1px solid var(--line)",
+                                borderRadius: 4,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
                       </div>
+                      {isAllVideos && (
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: "0.375rem", textAlign: "right" }}>
+                          Includes all videos in playlist (can be 30+)
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1676,7 +1703,7 @@ export default function Builder() {
                   doc={doc}
                   sourceUrl={sourceUrl || "https://www.youtube.com/playlist?list=DEMO"}
                   language={language}
-                  maxVideos={maxVideos}
+                  maxVideos={effectiveMaxVideos}
                 />
               )}
             </div>

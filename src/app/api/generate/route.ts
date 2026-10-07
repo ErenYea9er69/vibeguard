@@ -18,7 +18,7 @@ const requestSchema = z.object({
   audience: z.string().optional().default(""),
   tone: z.enum(["clear", "technical", "academic", "practical"]).optional().default("practical"),
   language: z.string().min(2).optional().default("en"),
-  maxVideos: z.number().int().min(1).max(30).optional().default(12),
+  maxVideos: z.number().int().min(0).max(500).optional().default(12),
   strictRules: z.boolean().optional().default(true)
 });
 
