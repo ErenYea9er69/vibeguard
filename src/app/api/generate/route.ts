@@ -17,7 +17,7 @@ const requestSchema = z.object({
   designStyle: z.enum(["auto", "editorial", "workbook", "dashboard", "slides"]).optional().default("auto"),
   audience: z.string().optional().default(""),
   tone: z.enum(["clear", "technical", "academic", "practical"]).optional().default("practical"),
-  language: z.string().min(2).optional().default("en"),
+  language: z.string().min(2).optional().default("auto"),
   maxVideos: z.number().int().min(0).max(500).optional().default(12),
   strictRules: z.boolean().optional().default(true)
 });

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Studio, { StudioTab } from "./Studio";
+import CustomSelect, { CustomSelectOption } from "./CustomSelect";
 import {
   ArrowRight,
   BookOpen,
@@ -74,12 +75,79 @@ const CONTENT_PRESETS = {
   },
 } satisfies Record<OutputFormat, { label: string; Icon: typeof BookOpen; desc: string }>;
 
-const UI_STYLE_OPTIONS: Array<{ id: DesignStyleOption; label: string; desc: string }> = [
-  { id: "auto", label: "Auto-Adaptive (Frontend Skill)", desc: "Analyzes topic to craft tailored palette, type & layout" },
-  { id: "editorial", label: "Editorial Magazine", desc: "Long-form reading with typography hierarchy & contents bar" },
-  { id: "workbook", label: "Interactive Workbook", desc: "Checkable tasks and reveal-on-click exercise answers" },
-  { id: "dashboard", label: "Modern Dashboard", desc: "Modular developer components & live glossary search" },
-  { id: "slides", label: "Slide Deck", desc: "Keyboard-driven presentation deck" },
+const UI_STYLE_DROPDOWN_OPTIONS: CustomSelectOption<DesignStyleOption>[] = [
+  {
+    value: "auto",
+    label: "Auto-Adaptive",
+    desc: "Analyzes topic to tailor palette, typography & layout",
+    badge: "AI",
+    icon: Sparkles,
+  },
+  {
+    value: "editorial",
+    label: "Editorial Magazine",
+    desc: "Long-form reading with typography hierarchy & contents bar",
+  },
+  {
+    value: "workbook",
+    label: "Interactive Workbook",
+    desc: "Checkable tasks and reveal-on-click exercise answers",
+  },
+  {
+    value: "dashboard",
+    label: "Modern Dashboard",
+    desc: "Modular developer components & live glossary search",
+  },
+  {
+    value: "slides",
+    label: "Slide Deck",
+    desc: "Keyboard-driven presentation deck",
+  },
+];
+
+const TONE_DROPDOWN_OPTIONS: CustomSelectOption<Tone>[] = [
+  {
+    value: "practical",
+    label: "Practical",
+    desc: "Applied real-world examples & actionable advice",
+  },
+  {
+    value: "clear",
+    label: "Clear",
+    desc: "Direct, plainspoken, and beginner-friendly",
+  },
+  {
+    value: "technical",
+    label: "Technical",
+    desc: "In-depth engineering architecture & code precision",
+  },
+  {
+    value: "academic",
+    label: "Academic",
+    desc: "Rigorous pedagogical concepts & theoretical depth",
+  },
+];
+
+const LANGUAGE_DROPDOWN_OPTIONS: CustomSelectOption[] = [
+  {
+    value: "auto",
+    label: "Auto Detect",
+    sublabel: "Video Language",
+    desc: "Matches original video language automatically",
+    badge: "AI",
+    icon: Sparkles,
+  },
+  { value: "en", label: "English", sublabel: "English", desc: "Universal standard" },
+  { value: "es", label: "Spanish", sublabel: "Español" },
+  { value: "fr", label: "French", sublabel: "Français" },
+  { value: "de", label: "German", sublabel: "Deutsch" },
+  { value: "ar", label: "Arabic", sublabel: "العربية" },
+  { value: "pt", label: "Portuguese", sublabel: "Português" },
+  { value: "ja", label: "Japanese", sublabel: "日本語" },
+  { value: "zh", label: "Chinese", sublabel: "中文" },
+  { value: "hi", label: "Hindi", sublabel: "हिन्दी" },
+  { value: "it", label: "Italian", sublabel: "Italiano" },
+  { value: "ru", label: "Russian", sublabel: "Русский" },
 ];
 
 const EXPORT_OPTIONS = [
@@ -102,7 +170,7 @@ export default function Builder() {
   const [designStyle, setDesignStyle] = useState<DesignStyleOption>("auto");
   const [tone, setTone] = useState<Tone>("practical");
   const [audience, setAudience] = useState("");
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState("auto");
   const [maxVideos, setMaxVideos] = useState(12);
   const [isAllVideos, setIsAllVideos] = useState(false);
   const [doc, setDoc] = useState<GeneratedDocument | null>(null);
@@ -317,24 +385,32 @@ export default function Builder() {
             border: "1px solid var(--line-2)",
             background: "var(--surface)",
             padding: "3rem 3rem 3.5rem",
-            overflow: "hidden",
             position: "relative",
           }}
         >
-          {/* Glow orb */}
+          {/* Glow orb container (clips glow to card shape without clipping dropdowns) */}
           <div
             aria-hidden
             style={{
               position: "absolute",
-              top: -80,
-              left: -60,
-              width: 380,
-              height: 380,
-              borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(192,57,43,.16) 0%, transparent 70%)",
+              inset: 0,
+              borderRadius: 20,
+              overflow: "hidden",
               pointerEvents: "none",
             }}
-          />
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: -80,
+                left: -60,
+                width: 380,
+                height: 380,
+                borderRadius: "50%",
+                background: "radial-gradient(circle, rgba(192,57,43,.16) 0%, transparent 70%)",
+              }}
+            />
+          </div>
 
           <div style={{ position: "relative", zIndex: 1, maxWidth: 960 }}>
             {/* Badge */}
@@ -607,32 +683,13 @@ export default function Builder() {
                         Grounds UI in subject
                       </span>
                     </div>
-                    <div style={{ position: "relative" }}>
-                      <select
-                        id="design-style-select"
-                        value={designStyle}
-                        onChange={(e) => setDesignStyle(e.target.value as DesignStyleOption)}
-                        className="field"
-                        style={{ fontSize: 12, paddingRight: "2rem" }}
-                      >
-                        {UI_STYLE_OPTIONS.map((opt) => (
-                          <option key={opt.id} value={opt.id}>
-                            {opt.label} — {opt.desc}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={13}
-                        style={{
-                          position: "absolute",
-                          right: "0.75rem",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          color: "var(--muted)",
-                          pointerEvents: "none",
-                        }}
-                      />
-                    </div>
+                    <CustomSelect<DesignStyleOption>
+                      id="design-style-select"
+                      value={designStyle}
+                      onChange={setDesignStyle}
+                      options={UI_STYLE_DROPDOWN_OPTIONS}
+                      menuPlacement="top"
+                    />
                   </div>
                 )}
               </div>
@@ -675,67 +732,29 @@ export default function Builder() {
 
                 {/* Tone + Language */}
                 <div style={{ marginTop: "0.875rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                  <label style={{ display: "block" }}>
+                  <div>
                     <span style={{ fontSize: 11, color: "var(--subtle)", display: "block", marginBottom: "0.375rem" }}>
                       Tone
                     </span>
-                    <div style={{ position: "relative" }}>
-                      <select
-                        id="tone-select"
-                        value={tone}
-                        onChange={(e) => setTone(e.target.value as Tone)}
-                        className="field"
-                        style={{ fontSize: 13, paddingRight: "2rem" }}
-                      >
-                        <option value="practical">Practical</option>
-                        <option value="clear">Clear</option>
-                        <option value="technical">Technical</option>
-                        <option value="academic">Academic</option>
-                      </select>
-                      <ChevronDown
-                        size={13}
-                        style={{
-                          position: "absolute",
-                          right: "0.75rem",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          color: "var(--muted)",
-                          pointerEvents: "none",
-                        }}
-                      />
-                    </div>
-                  </label>
+                    <CustomSelect<Tone>
+                      id="tone-select"
+                      value={tone}
+                      onChange={setTone}
+                      options={TONE_DROPDOWN_OPTIONS}
+                    />
+                  </div>
 
-                  <label style={{ display: "block" }}>
+                  <div>
                     <span style={{ fontSize: 11, color: "var(--subtle)", display: "block", marginBottom: "0.375rem" }}>
                       Language
                     </span>
-                    <div style={{ position: "relative" }}>
-                      <select
-                        id="language-select"
-                        value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
-                        className="field"
-                        style={{ fontSize: 13, paddingRight: "2rem" }}
-                      >
-                        <option value="en">English</option>
-                        <option value="fr">French</option>
-                        <option value="ar">Arabic</option>
-                        <option value="es">Spanish</option>
-                      </select>
-                      <ChevronDown
-                        size={13}
-                        style={{
-                          position: "absolute",
-                          right: "0.75rem",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          color: "var(--muted)",
-                          pointerEvents: "none",
-                        }}
-                      />
-                    </div>
-                  </label>
+                    <CustomSelect
+                      id="language-select"
+                      value={language}
+                      onChange={setLanguage}
+                      options={LANGUAGE_DROPDOWN_OPTIONS}
+                    />
+                  </div>
                 </div>
 
                 {/* Max videos - semi-auto based on video vs playlist */}

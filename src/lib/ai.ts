@@ -116,12 +116,16 @@ export async function generateDocument(args: {
     ? `Audience: ${args.audience.trim()}`
     : `Audience: [AUTO-DETECT]. The audience was not specified. Analyze the video topic, depth, and prerequisite knowledge. Automatically deduce the exact target learner persona (experience level, role, and practical goal) and write this tailored persona into the "audience" field in the output document.`;
 
+  const languageDirective = args.language === "auto" || !args.language
+    ? "Language: [AUTO-DETECT]. Automatically detect the primary language used in the source video material, and write the complete educational document in that exact same language (e.g., if the video is in French, generate in French; if Arabic, generate in Arabic; if Spanish, generate in Spanish; if English, generate in English)."
+    : `Language: ${args.language}`;
+
   const prompt = `You are CourseForge, a senior instructional designer and technical editor. Transform the provided YouTube material into a coherent ${args.format}. Preserve factual meaning. Do not invent facts that the source does not support. Resolve repetition, remove filler, and reorder ideas when this creates a better learning sequence.
 
 Output format: ${args.format}
 ${audienceDirective}
 Tone: ${args.tone}
-Language: ${args.language}
+${languageDirective}
 
 For course output, organize sections into lessons with objectives, key points, examples, and an exercise when the source provides enough material. For article or blog output, use body paragraphs and still preserve useful takeaways. Include sourceVideoIds so each major section remains traceable.${rulesSection}
 

@@ -55,7 +55,10 @@ async function fetchDirectVideo(videoId: string, language?: string): Promise<Sou
   // 2. Fetch transcript via youtube-transcript
   let transcript = "";
   try {
-    const items = await YoutubeTranscript.fetchTranscript(videoId, language ? { lang: language } : undefined);
+    const items = await YoutubeTranscript.fetchTranscript(
+      videoId,
+      language && language !== "auto" ? { lang: language } : undefined
+    );
     if (items && items.length) {
       transcript = items.map(item => item.text).join(" ");
     }
@@ -190,7 +193,7 @@ export async function getSourceVideos(
         const url = `https://www.youtube.com/watch?v=${parsed.id}`;
         const [metadata, transcript] = await Promise.all([
           supadata(`/metadata?url=${encodeURIComponent(url)}`),
-          supadata(`/transcript?url=${encodeURIComponent(url)}&lang=${encodeURIComponent(language)}`)
+          supadata(`/transcript?url=${encodeURIComponent(url)}${language && language !== "auto" ? `&lang=${encodeURIComponent(language)}` : ""}`)
         ]);
         const content = Array.isArray(transcript.content)
           ? transcript.content.map((x: { text: string }) => x.text).join(" ")
@@ -241,7 +244,7 @@ export async function getSourceVideos(
         try {
           const [metadata, transcript] = await Promise.all([
             supadata(`/metadata?url=${encodeURIComponent(url)}`),
-            supadata(`/transcript?url=${encodeURIComponent(url)}&lang=${encodeURIComponent(language)}`)
+            supadata(`/transcript?url=${encodeURIComponent(url)}${language && language !== "auto" ? `&lang=${encodeURIComponent(language)}` : ""}`)
           ]);
           const content = Array.isArray(transcript.content)
             ? transcript.content.map((x: { text: string }) => x.text).join(" ")

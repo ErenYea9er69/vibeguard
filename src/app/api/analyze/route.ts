@@ -7,7 +7,7 @@ import { GeneratedDocument } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const schema = z.object({ sourceUrl: z.string().min(1), language: z.string().default("en"), maxVideos: z.number().int().min(0).max(500).default(12), doc: z.any() });
+const schema = z.object({ sourceUrl: z.string().min(1), language: z.string().default("auto"), maxVideos: z.number().int().min(0).max(500).default(12), doc: z.any() });
 
 export async function POST(request: Request) {
   try {
