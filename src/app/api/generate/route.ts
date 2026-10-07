@@ -48,8 +48,23 @@ export async function POST(request: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let isClosed = false;
+
         function emit(data: Record<string, unknown>) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          if (isClosed) return;
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          } catch {
+            isClosed = true;
+          }
+        }
+
+        function closeStream() {
+          if (isClosed) return;
+          isClosed = true;
+          try {
+            controller.close();
+          } catch {}
         }
 
         function emitProgress(step: number, percent: number, title: string, detail: string, stepId: "source" | "transcripts" | "ai" | "markdown" | "design", logText?: string, logType: "info" | "success" | "warn" = "info") {
@@ -165,7 +180,7 @@ export async function POST(request: Request) {
               type: "complete",
               result: finalDoc
             });
-            controller.close();
+            closeStream();
             return;
           }
 
@@ -371,14 +386,14 @@ export async function POST(request: Request) {
             result: finalDoc
           });
 
-          controller.close();
+          closeStream();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Generation failed.";
           emit({
             type: "error",
             error: message
           });
-          controller.close();
+          closeStream();
         }
       }
     });

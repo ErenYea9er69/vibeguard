@@ -284,6 +284,20 @@ export default function Builder() {
         }),
       });
 
+      // 1. If HTTP status is not ok (400, 500, etc.)
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        let errMsg = `Generation failed (${res.status})`;
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.error || errMsg;
+        } catch {
+          if (text.trim()) errMsg = text.trim();
+        }
+        throw new Error(errMsg);
+      }
+
+      // 2. If response is streaming SSE
       if (res.headers.get("content-type")?.includes("text/event-stream") && res.body) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -299,9 +313,21 @@ export default function Builder() {
 
           for (const part of parts) {
             const line = part.trim();
+            if (!line) continue;
+
             if (line.startsWith("data: ")) {
+              const rawData = line.slice(6).trim();
+              let payload: any = null;
               try {
-                const payload = JSON.parse(line.slice(6));
+                payload = JSON.parse(rawData);
+              } catch {
+                if (rawData.toLowerCase().includes("error") || rawData.startsWith("An error")) {
+                  throw new Error(rawData);
+                }
+                continue;
+              }
+
+              if (payload) {
                 if (payload.type === "progress") {
                   setProgress((prev) => ({
                     step: payload.step,
@@ -319,11 +345,9 @@ export default function Builder() {
                 } else if (payload.type === "error") {
                   throw new Error(payload.error || "Generation failed.");
                 }
-              } catch (parseErr) {
-                if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
-                  throw parseErr;
-                }
               }
+            } else if (line.toLowerCase().includes("error") || line.startsWith("An error")) {
+              throw new Error(line);
             }
           }
         }
@@ -333,8 +357,13 @@ export default function Builder() {
         }
         setDoc(finalData);
       } else {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Generation failed.");
+        const text = await res.text().catch(() => "");
+        let data: any;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(text || "Invalid response from server.");
+        }
         setDoc(data);
       }
 
