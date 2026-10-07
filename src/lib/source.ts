@@ -104,7 +104,23 @@ async function fetchDirectVideo(videoId: string, language?: string): Promise<Sou
   };
 }
 
-async function fetchDirectPlaylist(playlistId: string, maxVideos: number, language?: string): Promise<{ videos: SourceVideo[]; title: string; channel?: string }> {
+export type SourceProgressCallback = (info: {
+  stage: "detecting" | "playlist_found" | "video_found" | "video_transcript" | "transcript_progress" | "complete";
+  title?: string;
+  channel?: string;
+  current?: number;
+  total?: number;
+  videoTitle?: string;
+  words?: number;
+  message: string;
+}) => void;
+
+async function fetchDirectPlaylist(
+  playlistId: string,
+  maxVideos: number,
+  language?: string,
+  onProgress?: SourceProgressCallback
+): Promise<{ videos: SourceVideo[]; title: string; channel?: string }> {
   const url = `https://www.youtube.com/playlist?list=${playlistId}`;
   let playlistTitle = "YouTube Playlist";
 
@@ -167,8 +183,27 @@ async function fetchDirectPlaylist(playlistId: string, maxVideos: number, langua
     throw new Error("No videos found in this playlist. Please check that the playlist is public.");
   }
 
-  const videos = await mapWithConcurrency(selectedIds, 6, async (id: string) => {
-    return fetchDirectVideo(id, language);
+  onProgress?.({
+    stage: "playlist_found",
+    title: playlistTitle,
+    total: selectedIds.length,
+    message: `Discovered playlist "${playlistTitle}" with ${selectedIds.length} videos`
+  });
+
+  let completedCount = 0;
+  const videos = await mapWithConcurrency(selectedIds, 4, async (id: string) => {
+    const video = await fetchDirectVideo(id, language);
+    completedCount++;
+    const words = video.transcript ? video.transcript.split(/\s+/).filter(Boolean).length : 0;
+    onProgress?.({
+      stage: "transcript_progress",
+      current: completedCount,
+      total: selectedIds.length,
+      videoTitle: video.title,
+      words,
+      message: `Extracted transcript [${completedCount}/${selectedIds.length}]: "${video.title}" (${words.toLocaleString()} words)`
+    });
+    return video;
   });
 
   return {
@@ -181,12 +216,22 @@ async function fetchDirectPlaylist(playlistId: string, maxVideos: number, langua
 export async function getSourceVideos(
   input: string,
   maxVideos: number,
-  language: string
+  language: string,
+  onProgress?: SourceProgressCallback
 ): Promise<{ videos: SourceVideo[]; title?: string; channel?: string; type: "video" | "playlist" }> {
+  onProgress?.({
+    stage: "detecting",
+    message: "Analyzing YouTube link format..."
+  });
   const parsed = detectYouTubeInput(input);
 
   // If single video, always lock maxVideos to 1
   if (parsed.type === "video") {
+    onProgress?.({
+      stage: "video_found",
+      message: `Connecting to video ${parsed.id}...`
+    });
+
     // Try Supadata if key available
     if (process.env.SUPADATA_API_KEY) {
       try {
@@ -198,6 +243,14 @@ export async function getSourceVideos(
         const content = Array.isArray(transcript.content)
           ? transcript.content.map((x: { text: string }) => x.text).join(" ")
           : String(transcript.content || "");
+        const words = content ? content.split(/\s+/).filter(Boolean).length : 0;
+        onProgress?.({
+          stage: "video_transcript",
+          title: metadata.title,
+          channel: metadata.channel?.name || metadata.author?.name,
+          words,
+          message: `Retrieved transcript for "${metadata.title || parsed.id}" (${words.toLocaleString()} words)`
+        });
         return {
           type: "video",
           title: metadata.title,
@@ -220,6 +273,14 @@ export async function getSourceVideos(
 
     // Direct scraper fallback (zero keys required)
     const video = await fetchDirectVideo(parsed.id, language);
+    const words = video.transcript ? video.transcript.split(/\s+/).filter(Boolean).length : 0;
+    onProgress?.({
+      stage: "video_transcript",
+      title: video.title,
+      channel: video.channel,
+      words,
+      message: `Retrieved transcript for "${video.title}" (${words.toLocaleString()} words)`
+    });
     return {
       type: "video",
       title: video.title,
@@ -239,8 +300,17 @@ export async function getSourceVideos(
       const idsData = await supadata(`/youtube/playlist/videos?id=${encodeURIComponent(parsed.id)}&limit=${limit}`);
       const ids = isAll ? (idsData.videoIds || []) : (idsData.videoIds || []).slice(0, playlistMax);
 
-      const videos = await mapWithConcurrency(ids, 6, async (id: string) => {
+      onProgress?.({
+        stage: "playlist_found",
+        title: playlist.title,
+        total: ids.length,
+        message: `Found playlist "${playlist.title}" with ${ids.length} videos`
+      });
+
+      let completedCount = 0;
+      const videos = await mapWithConcurrency(ids, 4, async (id: string) => {
         const url = `https://www.youtube.com/watch?v=${id}`;
+        let item: SourceVideo;
         try {
           const [metadata, transcript] = await Promise.all([
             supadata(`/metadata?url=${encodeURIComponent(url)}`),
@@ -249,7 +319,7 @@ export async function getSourceVideos(
           const content = Array.isArray(transcript.content)
             ? transcript.content.map((x: { text: string }) => x.text).join(" ")
             : String(transcript.content || "");
-          return {
+          item = {
             id,
             url,
             title: metadata.title || `Video ${id}`,
@@ -258,10 +328,21 @@ export async function getSourceVideos(
             channel: metadata.channel?.name || metadata.author?.name,
             thumbnail: metadata.media?.thumbnail,
             transcript: content
-          } satisfies SourceVideo;
+          };
         } catch {
-          return fetchDirectVideo(id, language);
+          item = await fetchDirectVideo(id, language);
         }
+        completedCount++;
+        const words = item.transcript ? item.transcript.split(/\s+/).filter(Boolean).length : 0;
+        onProgress?.({
+          stage: "transcript_progress",
+          current: completedCount,
+          total: ids.length,
+          videoTitle: item.title,
+          words,
+          message: `Extracted transcript [${completedCount}/${ids.length}]: "${item.title}" (${words.toLocaleString()} words)`
+        });
+        return item;
       });
 
       return { type: "playlist", title: playlist.title, channel: playlist.channel?.name, videos };
@@ -271,7 +352,7 @@ export async function getSourceVideos(
   }
 
   // Direct scraper fallback for playlists
-  const playlist = await fetchDirectPlaylist(parsed.id, playlistMax, language);
+  const playlist = await fetchDirectPlaylist(parsed.id, playlistMax, language, onProgress);
   return {
     type: "playlist",
     title: playlist.title,

@@ -86,18 +86,26 @@ function sanitizeDocument<T>(value: T): T {
   return value;
 }
 
-export async function generateDocument(args: {
-  videos: SourceVideo[];
-  sourceUrl: string;
-  sourceType: "video" | "playlist";
-  sourceTitle?: string;
-  channel?: string;
-  format: OutputFormat;
-  audience: string;
-  tone: Tone;
-  language: string;
-  strictRules?: boolean;
-}): Promise<GeneratedDocument> {
+export type AiProgressCallback = (info: {
+  stage: "preparing" | "synthesizing" | "complete";
+  message: string;
+}) => void;
+
+export async function generateDocument(
+  args: {
+    videos: SourceVideo[];
+    sourceUrl: string;
+    sourceType: "video" | "playlist";
+    sourceTitle?: string;
+    channel?: string;
+    format: OutputFormat;
+    audience: string;
+    tone: Tone;
+    language: string;
+    strictRules?: boolean;
+  },
+  onProgress?: AiProgressCallback
+): Promise<GeneratedDocument> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
   const ai = new GoogleGenAI({ apiKey });
@@ -108,6 +116,13 @@ export async function generateDocument(args: {
     .join("\n\n--- VIDEO ---\n\n");
 
   if (!prepared.trim()) throw new Error("No usable transcripts were found for this source.");
+
+  const totalWords = args.videos.reduce((acc, v) => acc + (v.transcript ? v.transcript.split(/\s+/).filter(Boolean).length : 0), 0);
+
+  onProgress?.({
+    stage: "preparing",
+    message: `Prepared ${totalWords.toLocaleString()} words across ${args.videos.length} video(s) for Gemini synthesis`
+  });
 
   const applyRules = args.strictRules !== false;
   const rulesSection = applyRules ? `\n\n${WRITING_RULES_PROMPT}` : "";
@@ -134,7 +149,12 @@ ${prepared}`;
 
   let response;
   let lastError: unknown;
-  const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+  onProgress?.({
+    stage: "synthesizing",
+    message: `Gemini AI (${modelName}) is structuring concepts, lessons & practical exercises...`
+  });
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {

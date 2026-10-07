@@ -22,11 +22,378 @@ const requestSchema = z.object({
   strictRules: z.boolean().optional().default(true)
 });
 
+function nowTime(): string {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 export async function POST(request: Request) {
+  const wantsStream =
+    request.headers.get("accept")?.includes("text/event-stream") ||
+    request.headers.get("x-stream") === "true" ||
+    new URL(request.url).searchParams.get("stream") === "true";
+
+  let body: z.infer<typeof requestSchema>;
   try {
-    const body = requestSchema.parse(await request.json());
-    
-    // Fall back to demo only if URL is explicitly "demo" or blank
+    body = requestSchema.parse(await request.json());
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Invalid request parameters.";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+
+  const isHtml = body.deliverableFormat === "html";
+  const totalSteps = isHtml ? 5 : 4;
+
+  if (wantsStream) {
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        function emit(data: Record<string, unknown>) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        }
+
+        function emitProgress(step: number, percent: number, title: string, detail: string, stepId: "source" | "transcripts" | "ai" | "markdown" | "design", logText?: string, logType: "info" | "success" | "warn" = "info") {
+          emit({
+            type: "progress",
+            step,
+            totalSteps,
+            stepsLeft: Math.max(0, totalSteps - step),
+            percent,
+            title,
+            detail,
+            stepId,
+            log: logText ? { time: nowTime(), text: logText, type: logType } : undefined
+          });
+        }
+
+        try {
+          // ——— DEMO MODE ——————————————————————————
+          if (!body.sourceUrl || body.sourceUrl === "demo") {
+            emitProgress(
+              1,
+              15,
+              "Resolving Courseware Source",
+              "Loading demo curriculum dataset (5 videos: Next.js 15, Server Actions, TypeScript)",
+              "source",
+              "Connected to demo YouTube playlist (5 videos detected)",
+              "success"
+            );
+
+            await new Promise((r) => setTimeout(r, 600));
+
+            emitProgress(
+              2,
+              45,
+              "Extracting Video Transcripts",
+              "Processed transcripts across 5 sample videos (18,400 words total prepared)",
+              "transcripts",
+              "Extracted transcripts for all 5 videos (18,400 words prepared)",
+              "success"
+            );
+
+            await new Promise((r) => setTimeout(r, 700));
+
+            emitProgress(
+              3,
+              70,
+              "Synthesizing Curriculum with Gemini AI",
+              `Structuring concepts, lessons, takeaways & exercises into a ${body.format}`,
+              "ai",
+              "Gemini AI synthesized modular learning structure and concept hierarchy",
+              "success"
+            );
+
+            const baseDoc = {
+              ...demoDocument,
+              format: body.format,
+              deliverableFormat: body.deliverableFormat,
+              generatedAt: new Date().toISOString(),
+              source: { ...demoDocument.source, url: body.sourceUrl || "https://www.youtube.com/playlist?list=DEMO" }
+            };
+
+            await new Promise((r) => setTimeout(r, 500));
+
+            emitProgress(
+              4,
+              85,
+              "Formatting Markdown Deliverable",
+              "Compiling formatted documentation with code syntax and lesson objectives",
+              "markdown",
+              "Compiled complete markdown deliverable and table of contents",
+              "success"
+            );
+
+            const markdown = renderMarkdown(baseDoc);
+            let html: string | undefined;
+
+            if (isHtml) {
+              emitProgress(
+                5,
+                94,
+                "Compiling Bespoke Interactive UI",
+                `Generating ${body.designStyle} interface layout, typography and widgets`,
+                "design",
+                `Compiling bespoke UI design tokens (${body.designStyle})`,
+                "info"
+              );
+
+              try {
+                const res = await generateDesign(baseDoc, body.designStyle);
+                html = res.html;
+              } catch {
+                html = renderDesignFallback(baseDoc, body.designStyle === "auto" ? "editorial" : body.designStyle);
+              }
+
+              emitProgress(
+                5,
+                99,
+                "Finalizing Deliverable",
+                "HTML webpage and responsive styling compiled successfully",
+                "design",
+                "Interactive UI rendered and verified",
+                "success"
+              );
+            }
+
+            const finalDoc = {
+              ...baseDoc,
+              generatedMarkdown: markdown,
+              ...(html ? { generatedHtml: html } : {})
+            };
+
+            emit({
+              type: "complete",
+              result: finalDoc
+            });
+            controller.close();
+            return;
+          }
+
+          // ——— REAL GENERATION ——————————————————————
+          if (!process.env.GEMINI_API_KEY) {
+            throw new Error("GEMINI_API_KEY is not configured in .env. Please set your Gemini API key.");
+          }
+
+          // Step 1 & 2: Source Discovery & Transcripts
+          emitProgress(
+            1,
+            12,
+            "Connecting to YouTube Source",
+            "Analyzing YouTube link format and resolving metadata...",
+            "source",
+            `Connecting to YouTube: ${body.sourceUrl}`,
+            "info"
+          );
+
+          let totalVideosToFetch = 1;
+          const source = await getSourceVideos(
+            body.sourceUrl,
+            body.maxVideos,
+            body.language,
+            (info) => {
+              if (info.stage === "playlist_found") {
+                totalVideosToFetch = info.total || 1;
+                emitProgress(
+                  1,
+                  20,
+                  "Discovered YouTube Playlist",
+                  `Found "${info.title}" with ${info.total} videos to process`,
+                  "source",
+                  `Found playlist "${info.title}" (${info.total} videos)`,
+                  "success"
+                );
+              } else if (info.stage === "video_found") {
+                emitProgress(
+                  1,
+                  20,
+                  "Found YouTube Video",
+                  info.message,
+                  "source",
+                  info.message,
+                  "info"
+                );
+              } else if (info.stage === "video_transcript") {
+                emitProgress(
+                  2,
+                  45,
+                  "Extracting Video Transcript",
+                  info.message,
+                  "transcripts",
+                  `✔ ${info.message}`,
+                  "success"
+                );
+              } else if (info.stage === "transcript_progress") {
+                const cur = info.current || 1;
+                const tot = info.total || totalVideosToFetch;
+                const pct = 20 + Math.round((cur / tot) * 35);
+                emitProgress(
+                  2,
+                  pct,
+                  "Extracting Video Transcripts",
+                  `Fetched ${cur} of ${tot}: "${info.videoTitle || "Video"}" (${info.words?.toLocaleString() || 0} words)`,
+                  "transcripts",
+                  `✔ [${cur}/${tot}] ${info.videoTitle || "Video"} (${info.words?.toLocaleString() || 0} words)`,
+                  "success"
+                );
+              }
+            }
+          );
+
+          const totalWordsExtracted = source.videos.reduce(
+            (acc, v) => acc + (v.transcript ? v.transcript.split(/\s+/).filter(Boolean).length : 0),
+            0
+          );
+
+          emitProgress(
+            2,
+            55,
+            "Transcripts Extracted",
+            `Extracted transcripts across all ${source.videos.length} video(s) (${totalWordsExtracted.toLocaleString()} words total)`,
+            "transcripts",
+            `All transcripts extracted: ${totalWordsExtracted.toLocaleString()} words total across ${source.videos.length} video(s)`,
+            "success"
+          );
+
+          // Step 3: Gemini AI Synthesis
+          emitProgress(
+            3,
+            60,
+            "Synthesizing Curriculum with Gemini AI",
+            `Sending ${totalWordsExtracted.toLocaleString()} words to Gemini 2.5 Flash for instructional synthesis...`,
+            "ai",
+            `Sending ${totalWordsExtracted.toLocaleString()} words to Gemini AI for instructional analysis`,
+            "info"
+          );
+
+          const document = await generateDocument(
+            {
+              videos: source.videos,
+              sourceUrl: body.sourceUrl,
+              sourceType: source.type,
+              sourceTitle: source.title,
+              channel: source.channel,
+              format: body.format,
+              audience: body.audience,
+              tone: body.tone,
+              language: body.language,
+              strictRules: body.strictRules
+            },
+            (aiInfo) => {
+              emitProgress(
+                3,
+                72,
+                "Synthesizing Curriculum with Gemini AI",
+                aiInfo.message,
+                "ai",
+                aiInfo.message,
+                "info"
+              );
+            }
+          );
+
+          emitProgress(
+            3,
+            80,
+            "Curriculum Synthesized",
+            `Generated ${document.sections.length} module sections with key takeaways and exercises`,
+            "ai",
+            `Gemini AI synthesis complete: ${document.sections.length} sections created`,
+            "success"
+          );
+
+          // Step 4: Markdown Deliverable
+          emitProgress(
+            4,
+            88,
+            "Formatting Markdown Deliverable",
+            "Compiling clean markdown document with structured sections and source links...",
+            "markdown",
+            "Compiling formatted markdown documentation",
+            "info"
+          );
+
+          const generatedMarkdown = renderMarkdown(document);
+
+          emitProgress(
+            4,
+            90,
+            "Markdown Formatted",
+            "Markdown syllabus and notes compiled successfully",
+            "markdown",
+            "Markdown document compiled and verified",
+            "success"
+          );
+
+          // Step 5: Bespoke HTML UI (if deliverableFormat === "html")
+          let generatedHtml: string | undefined;
+          if (isHtml) {
+            emitProgress(
+              5,
+              93,
+              "Compiling Bespoke Interactive UI",
+              `Synthesizing ${body.designStyle} design identity, typography and components...`,
+              "design",
+              `Generating bespoke interactive HTML deliverable (${body.designStyle})`,
+              "info"
+            );
+
+            try {
+              const designRes = await generateDesign(document, body.designStyle);
+              generatedHtml = designRes.html;
+            } catch (err) {
+              console.error("Design generation fallback used:", err);
+              generatedHtml = renderDesignFallback(
+                document,
+                body.designStyle === "auto" ? (document.format === "course" ? "workbook" : "editorial") : body.designStyle
+              );
+            }
+
+            emitProgress(
+              5,
+              99,
+              "Interactive UI Ready",
+              "Bespoke HTML webpage compiled with inline styles and interactive widgets",
+              "design",
+              "Bespoke HTML deliverable ready",
+              "success"
+            );
+          }
+
+          const finalDoc = {
+            ...document,
+            deliverableFormat: body.deliverableFormat,
+            generatedMarkdown,
+            ...(generatedHtml ? { generatedHtml } : {})
+          };
+
+          emit({
+            type: "complete",
+            result: finalDoc
+          });
+
+          controller.close();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Generation failed.";
+          emit({
+            type: "error",
+            error: message
+          });
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+
+  // Fallback non-streaming path
+  try {
     if (!body.sourceUrl || body.sourceUrl === "demo") {
       const baseDoc = {
         ...demoDocument,
@@ -37,7 +404,7 @@ export async function POST(request: Request) {
       };
       const markdown = renderMarkdown(baseDoc);
       let html: string | undefined;
-      if (body.deliverableFormat === "html") {
+      if (isHtml) {
         try {
           const res = await generateDesign(baseDoc, body.designStyle);
           html = res.html;
@@ -73,7 +440,7 @@ export async function POST(request: Request) {
     const generatedMarkdown = renderMarkdown(document);
     let generatedHtml: string | undefined;
 
-    if (body.deliverableFormat === "html") {
+    if (isHtml) {
       try {
         const designRes = await generateDesign(document, body.designStyle);
         generatedHtml = designRes.html;

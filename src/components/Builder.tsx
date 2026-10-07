@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Studio, { StudioTab } from "./Studio";
 import CustomSelect, { CustomSelectOption } from "./CustomSelect";
+import GenerationProgress, { GenerationProgressState } from "./GenerationProgress";
 import {
   ArrowRight,
   BookOpen,
@@ -183,6 +184,17 @@ export default function Builder() {
   const [tab, setTab] = useState<"design" | "read" | "markdown" | "quiz" | "cards" | "analysis" | "json">("design");
   const [copiedMd, setCopiedMd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [progress, setProgress] = useState<GenerationProgressState>({
+    step: 1,
+    totalSteps: 5,
+    stepsLeft: 4,
+    percent: 10,
+    title: "Initiating pipeline...",
+    detail: "Connecting to server...",
+    stepId: "source",
+    logs: [],
+    deliverableFormat: "html",
+  });
 
   const inputType = useMemo(() => {
     const trimmed = sourceUrl.trim();
@@ -228,10 +240,37 @@ export default function Builder() {
     event?.preventDefault();
     setError("");
     setLoading(true);
+
+    const initialTotalSteps = deliverableFormat === "html" ? 5 : 4;
+    setProgress({
+      step: 1,
+      totalSteps: initialTotalSteps,
+      stepsLeft: initialTotalSteps - 1,
+      percent: 10,
+      title: "Connecting to Pipeline",
+      detail: "Sending generation request to CourseForge engine...",
+      stepId: "source",
+      logs: [
+        {
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          text: `Initiating ${format} generation (${deliverableFormat.toUpperCase()} deliverable)`,
+          type: "info",
+        },
+      ],
+      deliverableFormat,
+    });
+
+    setTimeout(() => {
+      document.getElementById("generation-progress-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+        },
         body: JSON.stringify({
           sourceUrl: sourceUrl.trim(),
           deliverableFormat,
@@ -244,9 +283,60 @@ export default function Builder() {
           strictRules,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed.");
-      setDoc(data);
+
+      if (res.headers.get("content-type")?.includes("text/event-stream") && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let finalData: GeneratedDocument | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (line.startsWith("data: ")) {
+              try {
+                const payload = JSON.parse(line.slice(6));
+                if (payload.type === "progress") {
+                  setProgress((prev) => ({
+                    step: payload.step,
+                    totalSteps: payload.totalSteps,
+                    stepsLeft: payload.stepsLeft,
+                    percent: payload.percent,
+                    title: payload.title,
+                    detail: payload.detail,
+                    stepId: payload.stepId,
+                    deliverableFormat,
+                    logs: payload.log ? [...prev.logs, payload.log] : prev.logs,
+                  }));
+                } else if (payload.type === "complete") {
+                  finalData = payload.result;
+                } else if (payload.type === "error") {
+                  throw new Error(payload.error || "Generation failed.");
+                }
+              } catch (parseErr) {
+                if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
+                  throw parseErr;
+                }
+              }
+            }
+          }
+        }
+
+        if (!finalData) {
+          throw new Error("Stream finished before generation completed.");
+        }
+        setDoc(finalData);
+      } else {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Generation failed.");
+        setDoc(data);
+      }
 
       // Automatically switch to the matching deliverable tab
       if (deliverableFormat === "html") {
@@ -1035,18 +1125,7 @@ export default function Builder() {
         )}
 
         {loading && (
-          <div className="empty-state" style={{ marginTop: "2rem" }}>
-            <Loader2
-              size={32}
-              className="spin"
-              style={{ color: "var(--red-2)", display: "block", margin: "0 auto 1rem" }}
-            />
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: "0.375rem" }}>Generating artifact…</div>
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>
-              Pulling transcripts, restructuring content, building your{" "}
-              <strong style={{ color: "var(--text)" }}>{format}</strong>.
-            </div>
-          </div>
+          <GenerationProgress progress={progress} format={format} />
         )}
 
         {doc && (
