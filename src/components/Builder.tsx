@@ -328,7 +328,13 @@ export default function Builder() {
               }
 
               if (payload) {
-                if (payload.type === "progress") {
+                if (payload.type === "heartbeat") {
+                  setProgress((prev) => ({
+                    ...prev,
+                    percent: payload.percent ?? prev.percent,
+                    detail: payload.detail ?? prev.detail,
+                  }));
+                } else if (payload.type === "progress") {
                   setProgress((prev) => ({
                     step: payload.step,
                     totalSteps: payload.totalSteps,
@@ -352,8 +358,27 @@ export default function Builder() {
           }
         }
 
+        // Drain any leftover buffered events if the stream closed
+        if (buffer.trim()) {
+          const trailing = buffer.split("\n");
+          for (const line of trailing) {
+            if (line.startsWith("data: ")) {
+              try {
+                const payload = JSON.parse(line.slice(6));
+                if (payload?.type === "complete") {
+                  finalData = payload.result;
+                } else if (payload?.type === "error") {
+                  throw new Error(payload.error || "Generation failed.");
+                }
+              } catch (e) {
+                if (e instanceof Error && !e.message.includes("JSON")) throw e;
+              }
+            }
+          }
+        }
+
         if (!finalData) {
-          throw new Error("Stream finished before generation completed.");
+          throw new Error("Stream finished before generation completed. If OpenRouter is experiencing high traffic, please retry in a moment.");
         }
         setDoc(finalData);
       } else {

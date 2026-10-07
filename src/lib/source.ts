@@ -32,6 +32,147 @@ async function supadata(path: string, init?: RequestInit) {
   return res.json();
 }
 
+function parseTimedTextXml(xml: string): string {
+  // 1. Try srv3 format (<p t="..." d="..."><s>...</s></p>)
+  const pRegex = /<p\s+[^>]*>([\s\S]*?)<\/p>/g;
+  const sRegex = /<s[^>]*>([\s\S]*?)<\/s>/g;
+  const lines: string[] = [];
+
+  let pMatch;
+  while ((pMatch = pRegex.exec(xml)) !== null) {
+    const inner = pMatch[1];
+    let lineText = "";
+    let sMatch;
+    while ((sMatch = sRegex.exec(inner)) !== null) {
+      lineText += sMatch[1];
+    }
+    if (!lineText) {
+      lineText = inner.replace(/<[^>]+>/g, "");
+    }
+    lineText = lineText
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
+      .trim();
+    if (lineText) lines.push(lineText);
+  }
+
+  if (lines.length > 0) {
+    return lines.join(" ");
+  }
+
+  // 2. Fallback to classic format (<text start="...">...</text>)
+  const textMatches = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)];
+  if (textMatches.length > 0) {
+    return textMatches
+      .map(m => m[1]
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"')
+        .trim())
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return "";
+}
+
+export async function extractDirectTranscript(videoId: string, language?: string): Promise<string> {
+  // Strategy 1: InnerTube Android client (highest reliability across datacenter & serverless environments)
+  try {
+    const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "ANDROID",
+            clientVersion: "20.10.38",
+            hl: "en",
+            gl: "US",
+          },
+        },
+        videoId,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (Array.isArray(captionTracks) && captionTracks.length > 0) {
+        const track = (language && language !== "auto")
+          ? (captionTracks.find((t: { languageCode: string }) => t.languageCode === language) || captionTracks[0])
+          : captionTracks[0];
+
+        if (track?.baseUrl) {
+          const subRes = await fetch(track.baseUrl);
+          if (subRes.ok) {
+            const raw = await subRes.text();
+            const text = parseTimedTextXml(raw);
+            if (text && text.length > 50) return text;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Direct InnerTube transcript failed:", err);
+  }
+
+  // Strategy 2: Web Watch Page playerResponse scraper
+  try {
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9"
+      }
+    });
+    if (pageRes.ok) {
+      const html = await pageRes.text();
+      const match = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});(?:var|\s*<\/script>|\s*;\s*const)/);
+      if (match) {
+        const data = JSON.parse(match[1]);
+        const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+        if (Array.isArray(captionTracks) && captionTracks.length > 0) {
+          const track = (language && language !== "auto")
+            ? (captionTracks.find((t: { languageCode: string }) => t.languageCode === language) || captionTracks[0])
+            : captionTracks[0];
+
+          if (track?.baseUrl) {
+            const subRes = await fetch(track.baseUrl);
+            if (subRes.ok) {
+              const raw = await subRes.text();
+              const text = parseTimedTextXml(raw);
+              if (text && text.length > 50) return text;
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Watch page scraper failed:", err);
+  }
+
+  // Strategy 3: youtube-transcript package fallback
+  try {
+    const items = await YoutubeTranscript.fetchTranscript(
+      videoId,
+      language && language !== "auto" ? { lang: language } : undefined
+    );
+    if (items && items.length) {
+      return items.map(item => item.text).join(" ");
+    }
+  } catch {}
+
+  return "";
+}
+
 async function fetchDirectVideo(videoId: string, language?: string): Promise<SourceVideo> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   let title = `Video ${videoId}`;
@@ -52,26 +193,8 @@ async function fetchDirectVideo(videoId: string, language?: string): Promise<Sou
     console.warn("oEmbed fetch failed:", err);
   }
 
-  // 2. Fetch transcript via youtube-transcript
-  let transcript = "";
-  try {
-    const items = await YoutubeTranscript.fetchTranscript(
-      videoId,
-      language && language !== "auto" ? { lang: language } : undefined
-    );
-    if (items && items.length) {
-      transcript = items.map(item => item.text).join(" ");
-    }
-  } catch {
-    try {
-      const items = await YoutubeTranscript.fetchTranscript(videoId);
-      if (items && items.length) {
-        transcript = items.map(item => item.text).join(" ");
-      }
-    } catch (err) {
-      console.warn(`Direct transcript unavailable for ${videoId}:`, err);
-    }
-  }
+  // 2. Fetch transcript via robust multi-strategy extractor
+  let transcript = await extractDirectTranscript(videoId, language);
 
   // 3. If transcript is empty, try extracting description from watch page
   if (!transcript.trim()) {

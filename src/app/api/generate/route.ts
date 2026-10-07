@@ -280,31 +280,48 @@ export async function POST(request: Request) {
             "info"
           );
 
-          const document = await generateDocument(
-            {
-              videos: source.videos,
-              sourceUrl: body.sourceUrl,
-              sourceType: source.type,
-              sourceTitle: source.title,
-              channel: source.channel,
-              format: body.format,
-              audience: body.audience,
-              tone: body.tone,
-              language: body.language,
-              strictRules: body.strictRules
-            },
-            (aiInfo) => {
-              emitProgress(
-                3,
-                72,
-                "Synthesizing Curriculum with Nemotron AI",
-                aiInfo.message,
-                "ai",
-                aiInfo.message,
-                "info"
-              );
-            }
-          );
+          let pingCount = 0;
+          const heartbeatInterval = setInterval(() => {
+            pingCount++;
+            emit({
+              type: "heartbeat",
+              step: 3,
+              totalSteps,
+              percent: Math.min(78, 60 + Math.min(18, pingCount * 2)),
+              detail: `NVIDIA Nemotron 3 Ultra is actively synthesizing modules & concepts (${pingCount * 5}s elapsed)...`
+            });
+          }, 5000);
+
+          let document;
+          try {
+            document = await generateDocument(
+              {
+                videos: source.videos,
+                sourceUrl: body.sourceUrl,
+                sourceType: source.type,
+                sourceTitle: source.title,
+                channel: source.channel,
+                format: body.format,
+                audience: body.audience,
+                tone: body.tone,
+                language: body.language,
+                strictRules: body.strictRules
+              },
+              (aiInfo) => {
+                emitProgress(
+                  3,
+                  72,
+                  "Synthesizing Curriculum with Nemotron AI",
+                  aiInfo.message,
+                  "ai",
+                  aiInfo.message,
+                  "info"
+                );
+              }
+            );
+          } finally {
+            clearInterval(heartbeatInterval);
+          }
 
           emitProgress(
             3,
@@ -352,15 +369,33 @@ export async function POST(request: Request) {
               "info"
             );
 
+            let designPing = 0;
+            const designHeartbeat = setInterval(() => {
+              designPing++;
+              emit({
+                type: "heartbeat",
+                step: 5,
+                totalSteps,
+                percent: Math.min(98, 93 + designPing),
+                detail: `Synthesizing ${body.designStyle} interactive UI (${designPing * 5}s elapsed)...`
+              });
+            }, 5000);
+
             try {
-              const designRes = await generateDesign(document, body.designStyle);
+              const designPromise = generateDesign(document, body.designStyle);
+              const timeoutPromise = new Promise<{ html: string; engine: "fallback" }>((_, reject) =>
+                setTimeout(() => reject(new Error("AI design generation reached timeout, using fast design fallback")), 35000)
+              );
+              const designRes = await Promise.race([designPromise, timeoutPromise]);
               generatedHtml = designRes.html;
             } catch (err) {
-              console.error("Design generation fallback used:", err);
+              console.warn("Design generation fallback used:", err);
               generatedHtml = renderDesignFallback(
                 document,
                 body.designStyle === "auto" ? (document.format === "course" ? "workbook" : "editorial") : body.designStyle
               );
+            } finally {
+              clearInterval(designHeartbeat);
             }
 
             emitProgress(

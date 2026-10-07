@@ -1,4 +1,4 @@
-export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export function getOpenRouterApiKey(): string {
   return process.env.OPENROUTER_API_KEY || "";
@@ -59,11 +59,18 @@ export async function askOpenRouterText(args: {
   const apiKey = getOpenRouterApiKey();
   if (!apiKey) {
     throw new Error(
-      "OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use nvidia/nemotron-3-ultra-550b-a55b:free."
+      "OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use Nvidia Nemotron AI."
     );
   }
 
-  const model = args.model || getOpenRouterModel();
+  const requestedModel = args.model || getOpenRouterModel();
+  const models = [
+    requestedModel,
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3.5-lightning:free",
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
   const messages: { role: string; content: string }[] = [];
 
   if (args.system) {
@@ -82,11 +89,12 @@ export async function askOpenRouterText(args: {
           "HTTP-Referer": "http://localhost:3000",
           "X-Title": "CourseForge",
         },
+        signal: AbortSignal.timeout(60000),
         body: JSON.stringify({
-          model,
+          models,
           messages,
           temperature: args.temperature ?? 0.3,
-          max_tokens: args.maxTokens ?? 16000,
+          max_tokens: args.maxTokens ?? 8000,
         }),
       });
 
@@ -96,6 +104,11 @@ export async function askOpenRouterText(args: {
       }
 
       const data = await res.json();
+      if (data.error) {
+        const errMessage = typeof data.error === "string" ? data.error : data.error.message || JSON.stringify(data.error);
+        throw new Error(`OpenRouter model error (${data.error.code || res.status}): ${errMessage}`);
+      }
+
       const content = data.choices?.[0]?.message?.content;
       if (!content || typeof content !== "string" || !content.trim()) {
         throw new Error("OpenRouter model returned an empty response.");
@@ -105,7 +118,7 @@ export async function askOpenRouterText(args: {
     } catch (err) {
       lastError = err;
       if (attempt < 3) {
-        await new Promise((r) => setTimeout(r, attempt * 1200));
+        await new Promise((r) => setTimeout(r, attempt * 2000));
       }
     }
   }
