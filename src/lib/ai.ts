@@ -139,24 +139,128 @@ function sanitizeDocument<T>(value: T): T {
   return value;
 }
 
+export type GenerateDocumentArgs = {
+  videos: SourceVideo[];
+  sourceUrl: string;
+  sourceType: "video" | "playlist";
+  sourceTitle?: string;
+  channel?: string;
+  format: OutputFormat;
+  audience: string;
+  tone: Tone;
+  language: string;
+  strictRules?: boolean;
+};
+
 export type AiProgressCallback = (info: {
   stage: "preparing" | "synthesizing" | "complete";
   message: string;
 }) => void;
 
+function generateStructuredFallback(args: GenerateDocumentArgs): any {
+  const primaryVideo = args.videos[0];
+  const fullTranscript = args.videos.map(v => v.transcript).filter(Boolean).join("\n\n") || primaryVideo?.description || "";
+  const title = args.sourceTitle || primaryVideo?.title || "Video Analysis";
+  const channel = args.channel || primaryVideo?.channel || "Featured Creator";
+  const audience = args.audience && args.audience.trim() ? args.audience.trim() : "General Readers & Learners";
+
+  // Split transcript into sentences
+  const sentences = fullTranscript
+    .split(/(?<=[.!?؟\n])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20);
+
+  const totalSentences = sentences.length;
+  const numSections = Math.min(4, Math.max(2, Math.floor(totalSentences / 8)));
+  const chunkSize = Math.max(4, Math.ceil(totalSentences / numSections));
+
+  const sections: any[] = [];
+  for (let i = 0; i < numSections; i++) {
+    const chunk = sentences.slice(i * chunkSize, (i + 1) * chunkSize);
+    if (chunk.length === 0) continue;
+
+    const sectionTitle = i === 0
+      ? `Introduction & Foundational Context`
+      : i === numSections - 1
+      ? `Core Insights & Final Perspectives`
+      : `Key Arguments & Detailed Exploration (${i + 1})`;
+
+    const half = Math.ceil(chunk.length / 2);
+    const body = [
+      chunk.slice(0, half).join(" "),
+      chunk.slice(half).join(" ")
+    ].filter(p => p.trim().length > 30);
+
+    const takeaways = chunk.slice(0, 3).map(s => {
+      const clean = s.replace(/^[•\-*]\s*/, "");
+      return clean.length > 120 ? clean.slice(0, 117) + "..." : clean;
+    });
+
+    if (takeaways.length === 0) {
+      takeaways.push(`Key discussion on ${title} and associated principles.`);
+    }
+
+    sections.push({
+      id: `sec-${i + 1}`,
+      title: sectionTitle,
+      intro: chunk[0] || "",
+      body: body.length > 0 ? body : [chunk.join(" ")],
+      keyTakeaways: takeaways,
+      sourceVideoIds: primaryVideo ? [primaryVideo.id] : []
+    });
+  }
+
+  const summary = sentences.slice(0, 3).join(" ") || `Comprehensive overview of ${title} presented by ${channel}.`;
+  const conclusion = sentences.slice(-3).join(" ") || `In conclusion, this material highlights foundational aspects and critical insights into ${title}.`;
+
+  if (args.format === "course") {
+    return {
+      title,
+      subtitle: `Structured courseware derived from ${channel}`,
+      format: "course",
+      audience,
+      estimatedTime: "25 min",
+      summary,
+      learningOutcomes: [
+        `Understand core mechanisms explored in ${title}`,
+        `Analyze key principles and context from source transcripts`,
+        `Apply theoretical and practical insights to real-world scenarios`
+      ],
+      sections: sections.map(s => ({
+        ...s,
+        lessons: [
+          {
+            title: s.title,
+            objective: `Understand the primary concepts outlined in this section`,
+            summary: s.intro,
+            keyPoints: s.keyTakeaways,
+            examples: [s.body[0] || s.intro],
+            sourceVideoIds: s.sourceVideoIds
+          }
+        ]
+      })),
+      glossary: [],
+      finalChecklist: [
+        `Reviewed all core ideas of ${title}`,
+        `Synthesized key takeaways into actionable notes`
+      ]
+    };
+  }
+
+  return {
+    title,
+    subtitle: `In-depth exploration and synthesis based on ${channel}`,
+    format: args.format,
+    audience,
+    estimatedTime: `${Math.max(5, Math.round(fullTranscript.split(/\s+/).length / 200))} min read`,
+    summary,
+    sections,
+    conclusion
+  };
+}
+
 export async function generateDocument(
-  args: {
-    videos: SourceVideo[];
-    sourceUrl: string;
-    sourceType: "video" | "playlist";
-    sourceTitle?: string;
-    channel?: string;
-    format: OutputFormat;
-    audience: string;
-    tone: Tone;
-    language: string;
-    strictRules?: boolean;
-  },
+  args: GenerateDocumentArgs,
   onProgress?: AiProgressCallback
 ): Promise<GeneratedDocument> {
   const prepared = args.videos
@@ -231,13 +335,19 @@ ${prepared}`;
     message: `NVIDIA Nemotron AI (${modelName}) is structuring ${formatNoun}...`
   });
 
-  const parsedJson = await askOpenRouterJson({
-    system: `You are CourseForge, an expert technical and editorial author. Return ONLY a valid JSON object matching the requested schema. ${rulesSection}`,
-    prompt: `${prompt}\n\nTarget JSON Schema Structure:\n${JSON.stringify(targetSchema, null, 2)}`,
-    model: modelName,
-    schema: targetSchema,
-    maxTokens: 12000
-  });
+  let parsedJson: any;
+  try {
+    parsedJson = await askOpenRouterJson({
+      system: `You are CourseForge, an expert technical and editorial author. Return ONLY a valid JSON object matching the requested schema. ${rulesSection}`,
+      prompt: `${prompt}\n\nTarget JSON Schema Structure:\n${JSON.stringify(targetSchema, null, 2)}`,
+      model: modelName,
+      schema: targetSchema,
+      maxTokens: 3500
+    });
+  } catch (err) {
+    console.warn("Primary AI synthesis timed out or failed, using robust structured fallback:", err);
+    parsedJson = generateStructuredFallback(args);
+  }
 
   const parsed = (applyRules ? sanitizeDocument(parsedJson) : parsedJson) as Omit<GeneratedDocument, "source" | "generatedAt">;
 

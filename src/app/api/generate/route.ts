@@ -449,7 +449,7 @@ export async function POST(request: Request) {
             try {
               const designPromise = generateDesign(document, body.designStyle);
               const timeoutPromise = new Promise<{ html: string; engine: "fallback" }>((_, reject) =>
-                setTimeout(() => reject(new Error("AI design generation reached timeout, using fast design fallback")), 35000)
+                setTimeout(() => reject(new Error("AI design generation reached timeout, using fast design fallback")), 12000)
               );
               const designRes = await Promise.race([designPromise, timeoutPromise]);
               generatedHtml = designRes.html;

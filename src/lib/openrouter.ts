@@ -66,9 +66,9 @@ export async function askOpenRouterText(args: {
   const requestedModel = args.model || getOpenRouterModel();
   const models = [
     requestedModel,
-    "nvidia/nemotron-3-super-120b-a12b:free",
+    "openrouter/free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   const messages: { role: string; content: string }[] = [];
@@ -79,7 +79,7 @@ export async function askOpenRouterText(args: {
   messages.push({ role: "user", content: args.prompt });
 
   let lastError: unknown;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 1; attempt++) {
     try {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -89,12 +89,13 @@ export async function askOpenRouterText(args: {
           "HTTP-Referer": "http://localhost:3000",
           "X-Title": "CourseForge",
         },
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
           models,
           messages,
+          include_reasoning: false,
           temperature: args.temperature ?? 0.3,
-          max_tokens: args.maxTokens ?? 8000,
+          max_tokens: args.maxTokens ?? 3500,
         }),
       });
 
@@ -117,9 +118,6 @@ export async function askOpenRouterText(args: {
       return content.trim();
     } catch (err) {
       lastError = err;
-      if (attempt < 3) {
-        await new Promise((r) => setTimeout(r, attempt * 2000));
-      }
     }
   }
 
