@@ -81,10 +81,93 @@ function parseTimedTextXml(xml: string): string {
   return "";
 }
 
-export async function extractDirectTranscript(videoId: string, language?: string): Promise<string> {
+function dedupeRollingCaptions(text: string): string {
+  if (!text) return "";
+  const words = text.split(/\s+/).filter(Boolean);
+  const result: string[] = [];
+  let i = 0;
+  while (i < words.length) {
+    let matchedLen = 0;
+    // Look for repeated phrases between 2 and 25 words (common in rolling ticker subtitles)
+    for (let len = 2; len <= 25; len++) {
+      if (i + len * 2 <= words.length) {
+        const chunk1 = words.slice(i, i + len).join(" ");
+        const chunk2 = words.slice(i + len, i + len * 2).join(" ");
+        if (chunk1 === chunk2) {
+          matchedLen = len;
+          break;
+        }
+      }
+    }
+    if (matchedLen > 0) {
+      result.push(...words.slice(i, i + matchedLen));
+      i += matchedLen * 2;
+      while (
+        i + matchedLen <= words.length &&
+        words.slice(i, i + matchedLen).join(" ") === words.slice(i - matchedLen, i).join(" ")
+      ) {
+        i += matchedLen;
+      }
+    } else {
+      result.push(words[i]);
+      i++;
+    }
+  }
+  return result.join(" ");
+}
+
+async function fetchFromTranscriptAi(videoId: string): Promise<{ text: string; title?: string } | null> {
+  try {
+    const res = await fetch(`https://youtube-transcript.ai/transcript/${encodeURIComponent(videoId)}.txt`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/plain, */*",
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) return null;
+    const raw = await res.text();
+    if (!raw || raw.length < 50 || raw.includes("Page not found") || raw.includes("Cloudflare")) return null;
+
+    const titleMatch = raw.match(/^#\s*Transcript:\s*(.+)$/m);
+    const title = titleMatch ? titleMatch[1].trim() : undefined;
+
+    let body = raw;
+    const splitIdx = raw.indexOf("## Transcript");
+    if (splitIdx !== -1) {
+      body = raw.slice(splitIdx + "## Transcript".length);
+    }
+    const footerIdx = body.indexOf("\n---");
+    if (footerIdx !== -1) {
+      body = body.slice(0, footerIdx);
+    }
+
+    const cleanLines = body
+      .split("\n")
+      .map(line => line.replace(/^\[\d+:\d+(?::\d+)?\]\s*/, "").trim())
+      .filter(Boolean);
+
+    const rawJoined = cleanLines.join(" ");
+    const deduped = dedupeRollingCaptions(rawJoined);
+    if (deduped && deduped.length > 50) {
+      return { text: deduped, title };
+    }
+  } catch (err) {
+    console.warn("youtube-transcript.ai extraction failed:", err);
+  }
+  return null;
+}
+
+export async function extractDirectTranscriptWithMeta(videoId: string, language?: string): Promise<{ text: string; title?: string }> {
+  // Strategy 1: Dedicated Free Cloud-Resilient API (bypasses datacenter blocks on Vercel)
+  const fromAi = await fetchFromTranscriptAi(videoId);
+  if (fromAi && fromAi.text.length > 50) {
+    return fromAi;
+  }
+
   const langCode = language && language !== "auto" ? language : "en";
 
-  // Strategy 1: InnerTube Android client with full client headers
+  // Strategy 2: InnerTube Android client with full client headers
   try {
     const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
@@ -107,6 +190,7 @@ export async function extractDirectTranscript(videoId: string, language?: string
         },
         videoId,
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (res.ok) {
@@ -122,12 +206,13 @@ export async function extractDirectTranscript(videoId: string, language?: string
             headers: {
               "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
               "Accept": "*/*",
-            }
+            },
+            signal: AbortSignal.timeout(8000),
           });
           if (subRes.ok) {
             const raw = await subRes.text();
-            const text = parseTimedTextXml(raw);
-            if (text && text.length > 50) return text;
+            const text = dedupeRollingCaptions(parseTimedTextXml(raw));
+            if (text && text.length > 50) return { text };
           }
         }
       }
@@ -136,7 +221,7 @@ export async function extractDirectTranscript(videoId: string, language?: string
     console.warn("Direct InnerTube Android transcript failed:", err);
   }
 
-  // Strategy 1b: InnerTube ANDROID_TESTSUITE client fallback
+  // Strategy 3: InnerTube ANDROID_TESTSUITE client fallback
   try {
     const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
@@ -158,6 +243,7 @@ export async function extractDirectTranscript(videoId: string, language?: string
         },
         videoId,
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (res.ok) {
@@ -173,12 +259,13 @@ export async function extractDirectTranscript(videoId: string, language?: string
             headers: {
               "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
               "Accept": "*/*",
-            }
+            },
+            signal: AbortSignal.timeout(8000),
           });
           if (subRes.ok) {
             const raw = await subRes.text();
-            const text = parseTimedTextXml(raw);
-            if (text && text.length > 50) return text;
+            const text = dedupeRollingCaptions(parseTimedTextXml(raw));
+            if (text && text.length > 50) return { text };
           }
         }
       }
@@ -187,13 +274,14 @@ export async function extractDirectTranscript(videoId: string, language?: string
     console.warn("Direct InnerTube TESTSUITE transcript failed:", err);
   }
 
-  // Strategy 2: Web Watch Page playerResponse scraper
+  // Strategy 4: Web Watch Page playerResponse scraper
   try {
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9"
-      }
+      },
+      signal: AbortSignal.timeout(8000),
     });
     if (pageRes.ok) {
       const html = await pageRes.text();
@@ -207,11 +295,11 @@ export async function extractDirectTranscript(videoId: string, language?: string
             : captionTracks[0];
 
           if (track?.baseUrl) {
-            const subRes = await fetch(track.baseUrl);
+            const subRes = await fetch(track.baseUrl, { signal: AbortSignal.timeout(8000) });
             if (subRes.ok) {
               const raw = await subRes.text();
-              const text = parseTimedTextXml(raw);
-              if (text && text.length > 50) return text;
+              const text = dedupeRollingCaptions(parseTimedTextXml(raw));
+              if (text && text.length > 50) return { text };
             }
           }
         }
@@ -221,18 +309,24 @@ export async function extractDirectTranscript(videoId: string, language?: string
     console.warn("Watch page scraper failed:", err);
   }
 
-  // Strategy 3: youtube-transcript package fallback
+  // Strategy 5: youtube-transcript package fallback
   try {
     const items = await YoutubeTranscript.fetchTranscript(
       videoId,
       language && language !== "auto" ? { lang: language } : undefined
     );
     if (items && items.length) {
-      return items.map(item => item.text).join(" ");
+      const text = dedupeRollingCaptions(items.map(item => item.text).join(" "));
+      return { text };
     }
   } catch {}
 
-  return "";
+  return { text: "" };
+}
+
+export async function extractDirectTranscript(videoId: string, language?: string): Promise<string> {
+  const res = await extractDirectTranscriptWithMeta(videoId, language);
+  return res.text;
 }
 
 async function fetchDirectVideo(videoId: string, language?: string): Promise<SourceVideo> {
@@ -256,7 +350,10 @@ async function fetchDirectVideo(videoId: string, language?: string): Promise<Sou
   }
 
   // 2. Fetch transcript via robust multi-strategy extractor
-  const transcript = await extractDirectTranscript(videoId, language);
+  const { text: transcript, title: transcriptTitle } = await extractDirectTranscriptWithMeta(videoId, language);
+  if (transcriptTitle && (!title || title.startsWith("Video "))) {
+    title = transcriptTitle;
+  }
 
   // 3. Extract description only for metadata (never fake a transcript with YouTube's 31-word slogan)
   try {
