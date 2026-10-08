@@ -82,20 +82,26 @@ function parseTimedTextXml(xml: string): string {
 }
 
 export async function extractDirectTranscript(videoId: string, language?: string): Promise<string> {
-  // Strategy 1: InnerTube Android client (highest reliability across datacenter & serverless environments)
+  const langCode = language && language !== "auto" ? language : "en";
+
+  // Strategy 1: InnerTube Android client with full client headers
   try {
     const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+        "X-YouTube-Client-Name": "3",
+        "X-YouTube-Client-Version": "20.10.38",
+        "Origin": "https://www.youtube.com",
       },
       body: JSON.stringify({
         context: {
           client: {
             clientName: "ANDROID",
             clientVersion: "20.10.38",
-            hl: "en",
+            androidSdkVersion: 34,
+            hl: langCode,
             gl: "US",
           },
         },
@@ -112,7 +118,12 @@ export async function extractDirectTranscript(videoId: string, language?: string
           : captionTracks[0];
 
         if (track?.baseUrl) {
-          const subRes = await fetch(track.baseUrl);
+          const subRes = await fetch(track.baseUrl, {
+            headers: {
+              "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+              "Accept": "*/*",
+            }
+          });
           if (subRes.ok) {
             const raw = await subRes.text();
             const text = parseTimedTextXml(raw);
@@ -122,7 +133,58 @@ export async function extractDirectTranscript(videoId: string, language?: string
       }
     }
   } catch (err) {
-    console.warn("Direct InnerTube transcript failed:", err);
+    console.warn("Direct InnerTube Android transcript failed:", err);
+  }
+
+  // Strategy 1b: InnerTube ANDROID_TESTSUITE client fallback
+  try {
+    const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+        "X-YouTube-Client-Name": "30",
+        "X-YouTube-Client-Version": "20.10.38",
+        "Origin": "https://www.youtube.com",
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "ANDROID_TESTSUITE",
+            clientVersion: "20.10.38",
+            hl: langCode,
+            gl: "US",
+          },
+        },
+        videoId,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (Array.isArray(captionTracks) && captionTracks.length > 0) {
+        const track = (language && language !== "auto")
+          ? (captionTracks.find((t: { languageCode: string }) => t.languageCode === language) || captionTracks[0])
+          : captionTracks[0];
+
+        if (track?.baseUrl) {
+          const subRes = await fetch(track.baseUrl, {
+            headers: {
+              "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+              "Accept": "*/*",
+            }
+          });
+          if (subRes.ok) {
+            const raw = await subRes.text();
+            const text = parseTimedTextXml(raw);
+            if (text && text.length > 50) return text;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Direct InnerTube TESTSUITE transcript failed:", err);
   }
 
   // Strategy 2: Web Watch Page playerResponse scraper
@@ -194,27 +256,28 @@ async function fetchDirectVideo(videoId: string, language?: string): Promise<Sou
   }
 
   // 2. Fetch transcript via robust multi-strategy extractor
-  let transcript = await extractDirectTranscript(videoId, language);
+  const transcript = await extractDirectTranscript(videoId, language);
 
-  // 3. If transcript is empty, try extracting description from watch page
-  if (!transcript.trim()) {
-    try {
-      const pageRes = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept-Language": "en-US,en;q=0.9"
-        }
-      });
-      if (pageRes.ok) {
-        const html = await pageRes.text();
-        const descMatch = html.match(/<meta name="description" content="(.*?)">/);
-        if (descMatch && descMatch[1]) {
-          description = descMatch[1];
+  // 3. Extract description only for metadata (never fake a transcript with YouTube's 31-word slogan)
+  try {
+    const pageRes = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9"
+      }
+    });
+    if (pageRes.ok) {
+      const html = await pageRes.text();
+      const descMatch = html.match(/<meta name="description" content="(.*?)">/);
+      if (descMatch && descMatch[1]) {
+        const rawDesc = descMatch[1].trim();
+        // Ignore YouTube's boilerplate site slogans
+        if (!rawDesc.includes("Enjoy the videos and music") && !rawDesc.includes("upload original content") && rawDesc.length > 40) {
+          description = rawDesc;
         }
       }
-    } catch {}
-    transcript = description ? `Topic Overview from Video:\n${title}\n${description}` : `Video Topic: ${title} by ${channel}. Synthesize relevant educational lessons based on this topic.`;
-  }
+    }
+  } catch {}
 
   return {
     id: videoId,
@@ -402,7 +465,9 @@ export async function getSourceVideos(
       title: video.title,
       channel: video.channel,
       words,
-      message: `Retrieved transcript for "${video.title}" (${words.toLocaleString()} words)`
+      message: words > 0
+        ? `Retrieved transcript for "${video.title}" (${words.toLocaleString()} words)`
+        : `Could not retrieve automated captions for "${video.title}" (captions missing or restricted by YouTube)`
     });
     return {
       type: "video",

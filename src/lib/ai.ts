@@ -4,12 +4,67 @@ import { WRITING_RULES_PROMPT, BANNED_WORDS } from "./rules";
 
 export { WRITING_RULES_PROMPT, BANNED_WORDS };
 
-const schema = {
+const articleSchema = {
   type: "object",
   properties: {
     title: { type: "string" },
     subtitle: { type: "string" },
-    format: { type: "string", enum: ["course", "article", "blog"] },
+    format: { type: "string", enum: ["article"] },
+    audience: { type: "string" },
+    estimatedTime: { type: "string" },
+    summary: { type: "string" },
+    sections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          intro: { type: "string" },
+          body: { type: "array", items: { type: "string" } },
+          keyTakeaways: { type: "array", items: { type: "string" } },
+          sourceVideoIds: { type: "array", items: { type: "string" } }
+        },
+        required: ["title", "body", "keyTakeaways", "sourceVideoIds"]
+      }
+    },
+    conclusion: { type: "string" }
+  },
+  required: ["title", "subtitle", "format", "audience", "estimatedTime", "summary", "sections", "conclusion"]
+};
+
+const blogSchema = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    subtitle: { type: "string" },
+    format: { type: "string", enum: ["blog"] },
+    audience: { type: "string" },
+    estimatedTime: { type: "string" },
+    summary: { type: "string" },
+    sections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          body: { type: "array", items: { type: "string" } },
+          keyTakeaways: { type: "array", items: { type: "string" } },
+          sourceVideoIds: { type: "array", items: { type: "string" } }
+        },
+        required: ["title", "body", "keyTakeaways", "sourceVideoIds"]
+      }
+    },
+    conclusion: { type: "string" }
+  },
+  required: ["title", "subtitle", "format", "audience", "estimatedTime", "summary", "sections", "conclusion"]
+};
+
+const courseSchema = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    subtitle: { type: "string" },
+    format: { type: "string", enum: ["course"] },
     audience: { type: "string" },
     estimatedTime: { type: "string" },
     summary: { type: "string" },
@@ -31,7 +86,6 @@ const schema = {
                 summary: { type: "string" },
                 keyPoints: { type: "array", items: { type: "string" } },
                 examples: { type: "array", items: { type: "string" } },
-                exercise: { type: "string" },
                 sourceVideoIds: { type: "array", items: { type: "string" } }
               },
               required: ["title", "objective", "summary", "keyPoints", "examples", "sourceVideoIds"]
@@ -54,7 +108,7 @@ const schema = {
     },
     finalChecklist: { type: "array", items: { type: "string" } }
   },
-  required: ["title", "subtitle", "format", "audience", "estimatedTime", "summary", "learningOutcomes", "sections", "glossary", "finalChecklist"]
+  required: ["title", "subtitle", "format", "audience", "estimatedTime", "summary", "learningOutcomes", "sections"]
 };
 
 function cleanText(text: string): string {
@@ -124,48 +178,72 @@ export async function generateDocument(
 
   const audienceDirective = args.audience && args.audience.trim()
     ? `Audience: ${args.audience.trim()}`
-    : `Audience: [AUTO-DETECT]. The audience was not specified. Analyze the video topic, depth, and prerequisite knowledge. Automatically deduce the exact target learner persona (experience level, role, and practical goal) and write this tailored persona into the "audience" field in the output document.`;
+    : `Audience: [AUTO-DETECT]. The audience was not specified. Analyze the video topic, depth, and prerequisite knowledge. Deduce the exact target learner/reader persona and write this into the "audience" field in the output document.`;
 
   const languageDirective = args.language === "auto" || !args.language
-    ? "Language: [AUTO-DETECT]. Automatically detect the primary language used in the source video material, and write the complete educational document in that exact same language (e.g., if the video is in French, generate in French; if Arabic, generate in Arabic; if Spanish, generate in Spanish; if English, generate in English)."
+    ? "Language: [AUTO-DETECT]. Automatically detect the primary language used in the source video material, and write the complete document in that exact same language (e.g., if the video is in Arabic, generate in Arabic; if French, French; if Spanish, Spanish; if English, English)."
     : `Language: ${args.language}`;
 
-  const prompt = `You are CourseForge, a senior instructional designer and technical editor. Transform the provided YouTube material into a coherent ${args.format}. Preserve factual meaning. Do not invent facts that the source does not support. Resolve repetition, remove filler, and reorder ideas when this creates a better learning sequence.
+  let formatDirective = "";
+  let targetSchema: object = articleSchema;
+
+  if (args.format === "article") {
+    targetSchema = articleSchema;
+    formatDirective = `CRITICAL FORMAT REQUIREMENT: Transform the source material into an in-depth, publication-quality ARTICLE.
+- Organize the article into substantive sections. Each section must feature comprehensive, well-developed body paragraphs that explore the ideas, mechanisms, context, and arguments presented in the source video.
+- For each section, provide 2 to 4 bulleted key takeaways capturing the critical insights.
+- Provide a summary/introduction at the beginning and a synthesizing conclusion at the end.
+- STRICT PROHIBITION: Do NOT include quizzes, exercises, flashcards, lessons, or classroom homework. The user requested an ARTICLE. Deliver pure long-form article prose.`;
+  } else if (args.format === "blog") {
+    targetSchema = blogSchema;
+    formatDirective = `CRITICAL FORMAT REQUIREMENT: Transform the source material into a modern, engaging, and scannable BLOG POST.
+- Write punchy, readable body paragraphs grouped under compelling section titles.
+- Highlight standout takeaways and quotes for each section.
+- Provide an engaging opening hook/summary and a memorable conclusion.
+- STRICT PROHIBITION: Do NOT include quizzes, exercises, flashcards, lessons, or classroom tasks. Deliver a clean blog post.`;
+  } else {
+    targetSchema = courseSchema;
+    formatDirective = `CRITICAL FORMAT REQUIREMENT: Transform the source material into a structured COURSE. Organize sections into lessons with objectives, key points, examples, and takeaways. Include sourceVideoIds for traceability.`;
+  }
+
+  const prompt = `You are CourseForge, an expert editorial and technical author. Transform the provided YouTube material into a coherent ${args.format}. Preserve factual meaning. Do not invent facts that the source does not support. Resolve repetition, remove filler, and reorder ideas when this creates a better narrative sequence.
 
 Output format: ${args.format}
 ${audienceDirective}
 Tone: ${args.tone}
 ${languageDirective}
 
-For course output, organize sections into lessons with objectives, key points, examples, and an exercise when the source provides enough material. For article or blog output, use body paragraphs and still preserve useful takeaways. Include sourceVideoIds so each major section remains traceable.${rulesSection}
+${formatDirective}${rulesSection}
 
 SOURCE MATERIAL:
 ${prepared}`;
 
   if (!hasOpenRouter()) {
     throw new Error(
-      "OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use nvidia/nemotron-3-ultra-550b-a55b:free."
+      "OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use Nvidia Nemotron AI."
     );
   }
 
   const modelName = getOpenRouterModel();
+  const formatNoun = args.format === "article" ? "in-depth article sections & takeaways" : args.format === "blog" ? "blog post sections & key insights" : "curriculum modules & lessons";
   onProgress?.({
     stage: "synthesizing",
-    message: `NVIDIA Nemotron 3 Ultra (${modelName}) is structuring concepts, lessons & practical exercises...`
+    message: `NVIDIA Nemotron AI (${modelName}) is structuring ${formatNoun}...`
   });
 
   const parsedJson = await askOpenRouterJson({
-    system: `You are CourseForge, a senior instructional designer. Return ONLY a valid JSON object matching the requested schema. ${rulesSection}`,
-    prompt: `${prompt}\n\nTarget JSON Schema Structure:\n${JSON.stringify(schema, null, 2)}`,
+    system: `You are CourseForge, an expert technical and editorial author. Return ONLY a valid JSON object matching the requested schema. ${rulesSection}`,
+    prompt: `${prompt}\n\nTarget JSON Schema Structure:\n${JSON.stringify(targetSchema, null, 2)}`,
     model: modelName,
-    schema,
-    maxTokens: 16000
+    schema: targetSchema,
+    maxTokens: 12000
   });
 
   const parsed = (applyRules ? sanitizeDocument(parsedJson) : parsedJson) as Omit<GeneratedDocument, "source" | "generatedAt">;
 
   return {
     ...parsed,
+    format: args.format,
     source: {
       url: args.sourceUrl,
       type: args.sourceType,

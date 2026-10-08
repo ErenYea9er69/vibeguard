@@ -49,10 +49,11 @@ export type GeneratedDocument = {
     videoCount: number;
   };
   summary: string;
-  learningOutcomes: string[];
+  learningOutcomes?: string[];
   sections: Section[];
-  glossary: Array<{ term: string; definition: string }>;
-  finalChecklist: string[];
+  conclusion?: string;
+  glossary?: Array<{ term: string; definition: string }>;
+  finalChecklist?: string[];
   generatedAt: string;
   generatedHtml?: string;
   generatedMarkdown?: string;

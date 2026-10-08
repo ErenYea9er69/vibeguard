@@ -57,7 +57,7 @@ export async function analyzeSource(videos: SourceVideo[], doc?: GeneratedDocume
 function kitFromDocument(doc: GeneratedDocument): StudyKit {
   const lessons = doc.sections.flatMap(s => s.lessons ?? []);
   const flashcards = [
-    ...doc.glossary.map(g => ({ front: g.term, back: g.definition })),
+    ...(doc.glossary || []).map(g => ({ front: g.term, back: g.definition })),
     ...lessons.map(l => ({ front: l.title, back: l.objective }))
   ];
   const quiz = lessons.slice(0, 5).map((l, i) => {

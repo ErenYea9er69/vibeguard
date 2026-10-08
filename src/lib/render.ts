@@ -7,25 +7,41 @@ function escapeHtml(input: string) {
 export function renderHtml(doc: GeneratedDocument) {
   const sections = doc.sections.map((section, index) => `
     <section class="section">
-      <div class="eyebrow">SECTION ${String(index + 1).padStart(2, "0")}</div>
+      <div class="eyebrow">${doc.format === "course" ? `SECTION ${String(index + 1).padStart(2, "0")}` : `PART ${String(index + 1).padStart(2, "0")}`}</div>
       <h2>${escapeHtml(section.title)}</h2>
-      <p class="intro">${escapeHtml(section.intro)}</p>
+      ${section.intro ? `<p class="intro">${escapeHtml(section.intro)}</p>` : ""}
       ${section.lessons?.map((lesson, lessonIndex) => `
         <article class="lesson">
           <div class="lesson-number">${lessonIndex + 1}</div>
           <div>
             <h3>${escapeHtml(lesson.title)}</h3>
-            <p><strong>Objective:</strong> ${escapeHtml(lesson.objective)}</p>
+            ${lesson.objective ? `<p><strong>Objective:</strong> ${escapeHtml(lesson.objective)}</p>` : ""}
             <p>${escapeHtml(lesson.summary)}</p>
-            ${lesson.keyPoints.length ? `<h4>Key points</h4><ul>${lesson.keyPoints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}
-            ${lesson.examples.length ? `<h4>Examples</h4><ul>${lesson.examples.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}
-            ${lesson.exercise ? `<div class="exercise"><strong>Practice</strong><p>${escapeHtml(lesson.exercise)}</p></div>` : ""}
+            ${lesson.keyPoints?.length ? `<h4>Key points</h4><ul>${lesson.keyPoints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}
+            ${lesson.examples?.length ? `<h4>Examples</h4><ul>${lesson.examples.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}
+            ${lesson.exercise && doc.format === "course" ? `<div class="exercise"><strong>Practice</strong><p>${escapeHtml(lesson.exercise)}</p></div>` : ""}
           </div>
         </article>
       `).join("") || ""}
       ${section.body?.map(p => `<p>${escapeHtml(p)}</p>`).join("") || ""}
-      ${section.keyTakeaways.length ? `<div class="takeaways"><h4>Key takeaways</h4><ul>${section.keyTakeaways.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+      ${section.keyTakeaways?.length ? `<div class="takeaways"><h4>Key takeaways</h4><ul>${section.keyTakeaways.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
     </section>`).join("");
+
+  const outcomesBlock = doc.learningOutcomes?.length
+    ? `<section class="section"><div class="eyebrow">LEARNING OUTCOMES</div><ul>${doc.learningOutcomes.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></section>`
+    : "";
+
+  const conclusionBlock = doc.conclusion
+    ? `<section class="section"><div class="eyebrow">CONCLUSION</div><p>${escapeHtml(doc.conclusion)}</p></section>`
+    : "";
+
+  const glossaryBlock = doc.glossary?.length
+    ? `<section class="section"><div class="eyebrow">GLOSSARY</div>${doc.glossary.map(x => `<p><strong>${escapeHtml(x.term)}</strong><br/>${escapeHtml(x.definition)}</p>`).join("")}</section>`
+    : "";
+
+  const checklistBlock = doc.finalChecklist?.length
+    ? `<section class="section"><div class="eyebrow">FINAL CHECKLIST</div><ul>${doc.finalChecklist.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></section>`
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -63,7 +79,7 @@ li { margin: 4px 0; }
 <body>
 <main>
 <section class="cover">
-<div class="kicker">COURSEFORGE EXPORT</div>
+<div class="kicker">COURSEFORGE · ${escapeHtml(doc.format.toUpperCase())}</div>
 <h1>${escapeHtml(doc.title)}</h1>
 <p class="muted">${escapeHtml(doc.subtitle)}</p>
 <div class="meta">
@@ -71,12 +87,14 @@ li { margin: 4px 0; }
 <div><strong>Audience</strong><br/>${escapeHtml(doc.audience)}</div>
 <div><strong>Estimated time</strong><br/>${escapeHtml(doc.estimatedTime)}</div>
 </div>
-<p class="small muted" style="margin-top:22px">Source: ${escapeHtml(doc.source.title || doc.source.url)} · ${doc.source.videoCount} video(s)</p>
+<p class="small muted" style="margin-top:22px">Source: ${escapeHtml(doc.source?.title || doc.source?.url || "Custom Input")} · ${doc.source?.videoCount || 1} video(s)</p>
 </section>
-<section class="section"><div class="eyebrow">OVERVIEW</div><p>${escapeHtml(doc.summary)}</p><h3>Learning outcomes</h3><ul>${doc.learningOutcomes.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></section>
+<section class="section"><div class="eyebrow">OVERVIEW</div><p>${escapeHtml(doc.summary)}</p></section>
+${outcomesBlock}
 ${sections}
-<section class="section"><div class="eyebrow">GLOSSARY</div>${doc.glossary.map(x => `<p><strong>${escapeHtml(x.term)}</strong><br/>${escapeHtml(x.definition)}</p>`).join("")}</section>
-<section class="section"><div class="eyebrow">FINAL CHECKLIST</div><ul>${doc.finalChecklist.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></section>
+${conclusionBlock}
+${glossaryBlock}
+${checklistBlock}
 </main>
 </body>
 </html>`;
@@ -106,7 +124,7 @@ export function renderMarkdown(doc: GeneratedDocument): string {
       for (let j = 0; j < section.lessons.length; j++) {
         const lesson = section.lessons[j];
         parts.push(`### Lesson ${j + 1}: ${lesson.title}\n`);
-        parts.push(`**Objective**: ${lesson.objective}\n`);
+        if (lesson.objective) parts.push(`**Objective**: ${lesson.objective}\n`);
         parts.push(`${lesson.summary}\n`);
         if (lesson.keyPoints?.length) {
           parts.push(`**Key Points:**`);
@@ -118,7 +136,7 @@ export function renderMarkdown(doc: GeneratedDocument): string {
           for (const ex of lesson.examples) parts.push(`- ${ex}`);
           parts.push("");
         }
-        if (lesson.exercise) {
+        if (lesson.exercise && doc.format === "course") {
           parts.push(`> **Practice Task**: ${lesson.exercise}\n`);
         }
       }
@@ -133,6 +151,10 @@ export function renderMarkdown(doc: GeneratedDocument): string {
       for (const t of section.keyTakeaways) parts.push(`- ${t}`);
       parts.push("");
     }
+  }
+
+  if (doc.conclusion) {
+    parts.push(`## Conclusion\n\n${doc.conclusion}\n`);
   }
 
   if (doc.glossary?.length) {

@@ -68,7 +68,7 @@ export async function askOpenRouterText(args: {
     requestedModel,
     "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "nvidia/nemotron-3.5-lightning:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   const messages: { role: string; content: string }[] = [];
@@ -89,7 +89,7 @@ export async function askOpenRouterText(args: {
           "HTTP-Referer": "http://localhost:3000",
           "X-Title": "CourseForge",
         },
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(90000),
         body: JSON.stringify({
           models,
           messages,

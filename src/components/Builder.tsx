@@ -181,7 +181,9 @@ export default function Builder() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [strictRules, setStrictRules] = useState(true);
   const [showRulesModal, setShowRulesModal] = useState(false);
-  const [tab, setTab] = useState<"design" | "read" | "markdown" | "quiz" | "cards" | "analysis" | "json">("design");
+  const [sourceMode, setSourceMode] = useState<"url" | "transcript">("url");
+  const [customTranscript, setCustomTranscript] = useState("");
+  const [tab, setTab] = useState<"design" | "read" | "markdown" | "json">("design");
   const [copiedMd, setCopiedMd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [progress, setProgress] = useState<GenerationProgressState>({
@@ -239,6 +241,16 @@ export default function Builder() {
   async function generate(event?: FormEvent) {
     event?.preventDefault();
     setError("");
+
+    if (sourceMode === "transcript" && !customTranscript.trim()) {
+      setError("Please paste the video transcript or notes text.");
+      return;
+    }
+    if (sourceMode === "url" && !sourceUrl.trim()) {
+      setError("Please enter a YouTube video URL or select 'Paste Transcript / Notes'.");
+      return;
+    }
+
     setLoading(true);
 
     const initialTotalSteps = deliverableFormat === "html" ? 5 : 4;
@@ -272,7 +284,8 @@ export default function Builder() {
           "Accept": "text/event-stream",
         },
         body: JSON.stringify({
-          sourceUrl: sourceUrl.trim(),
+          sourceUrl: sourceMode === "url" ? sourceUrl.trim() : (sourceUrl.trim() || ""),
+          customTranscript: sourceMode === "transcript" || customTranscript.trim() ? customTranscript.trim() : "",
           deliverableFormat,
           format,
           designStyle,
@@ -621,108 +634,165 @@ export default function Builder() {
                   WebkitBackdropFilter: "blur(8px)",
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: "0.75rem" }}>
-                  YouTube source
+                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.875rem" }}>
+                  <button
+                    type="button"
+                    className={`chip ${sourceMode === "url" ? "on" : ""}`}
+                    onClick={() => setSourceMode("url")}
+                    style={{ fontSize: 11, padding: "0.35rem 0.75rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+                  >
+                    <Play size={11} /> YouTube URL
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip ${sourceMode === "transcript" ? "on" : ""}`}
+                    onClick={() => setSourceMode("transcript")}
+                    style={{ fontSize: 11, padding: "0.35rem 0.75rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+                  >
+                    <FileText size={11} /> Paste Transcript / Notes
+                  </button>
                 </div>
 
-                {/* URL input */}
-                <div
-                  className="focus-ring"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    background: "var(--field-bg)",
-                    border: "1px solid var(--line-2)",
-                    borderRadius: 10,
-                    padding: "0 0.875rem",
-                    transition: "border-color 0.15s, box-shadow 0.15s",
-                  }}
-                >
-                  <Play size={14} style={{ color: "var(--subtle)", flexShrink: 0 }} />
-                  <input
-                    id="source-url"
-                    value={sourceUrl}
-                    onChange={(e) => setSourceUrl(e.target.value)}
-                    placeholder="Paste YouTube video or playlist URL..."
-                    style={{
-                      flex: 1,
-                      background: "transparent",
-                      border: "none",
-                      outline: "none",
-                      padding: "0.75rem 0",
-                      fontSize: 13,
-                      color: "var(--text)",
-                    }}
-                  />
-                  {sourceUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setSourceUrl("")}
+                {sourceMode === "url" ? (
+                  <>
+                    {/* URL input */}
+                    <div
+                      className="focus-ring"
                       style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "var(--subtle)",
-                        padding: "0.25rem",
                         display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        background: "var(--field-bg)",
+                        border: "1px solid var(--line-2)",
+                        borderRadius: 10,
+                        padding: "0 0.875rem",
+                        transition: "border-color 0.15s, box-shadow 0.15s",
                       }}
-                      aria-label="Clear URL"
                     >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
+                      <Play size={14} style={{ color: "var(--subtle)", flexShrink: 0 }} />
+                      <input
+                        id="source-url"
+                        value={sourceUrl}
+                        onChange={(e) => setSourceUrl(e.target.value)}
+                        placeholder="Paste YouTube video or playlist URL..."
+                        style={{
+                          flex: 1,
+                          background: "transparent",
+                          border: "none",
+                          outline: "none",
+                          padding: "0.75rem 0",
+                          fontSize: 13,
+                          color: "var(--text)",
+                        }}
+                      />
+                      {sourceUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setSourceUrl("")}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "var(--subtle)",
+                            padding: "0.25rem",
+                            display: "flex",
+                          }}
+                          aria-label="Clear URL"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
 
-                <div style={{ marginTop: "0.5rem", fontSize: 11 }}>
-                  {inputType === "video" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--red-2)", fontWeight: 500 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red-2)" }} />
-                      Single video detected (max videos locked to 1)
+                    <div style={{ marginTop: "0.5rem", fontSize: 11 }}>
+                      {inputType === "video" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--red-2)", fontWeight: 500 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red-2)" }} />
+                          Single video detected (max videos locked to 1)
+                        </div>
+                      )}
+                      {inputType === "playlist" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--red-2)", fontWeight: 500 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red-2)" }} />
+                          Playlist detected (select how many videos to include below)
+                        </div>
+                      )}
+                      {inputType === "video-in-playlist" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--muted)" }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--muted)" }} />
+                          Video from playlist link detected (processing this single video)
+                        </div>
+                      )}
+                      {inputType === "empty" && (
+                        <span style={{ color: "var(--subtle)" }}>
+                          Paste a single video or full playlist link.
+                        </span>
+                      )}
                     </div>
-                  )}
-                  {inputType === "playlist" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--red-2)", fontWeight: 500 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red-2)" }} />
-                      Playlist detected (select how many videos to include below)
-                    </div>
-                  )}
-                  {inputType === "video-in-playlist" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", color: "var(--muted)" }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--muted)" }} />
-                      Video from playlist link detected (processing this single video)
-                    </div>
-                  )}
-                  {inputType === "empty" && (
-                    <span style={{ color: "var(--subtle)" }}>
-                      Paste a single video or full playlist link.
-                    </span>
-                  )}
-                </div>
 
-                {/* Sample pills */}
-                <div
-                  style={{
-                    marginTop: "0.875rem",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "0.375rem",
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={{ fontSize: 11, color: "var(--subtle)" }}>Try:</span>
-                  {SAMPLE_URLS.map((s) => (
-                    <button
-                      key={s.label}
-                      type="button"
-                      className="sample-pill"
-                      onClick={() => setSourceUrl(s.url)}
+                    {/* Sample pills */}
+                    <div
+                      style={{
+                        marginTop: "0.875rem",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.375rem",
+                        alignItems: "center",
+                      }}
                     >
-                      {s.label}
-                      <ChevronRight size={10} />
-                    </button>
-                  ))}
-                </div>
+                      <span style={{ fontSize: 11, color: "var(--subtle)" }}>Try:</span>
+                      {SAMPLE_URLS.map((s) => (
+                        <button
+                          key={s.label}
+                          type="button"
+                          className="sample-pill"
+                          onClick={() => setSourceUrl(s.url)}
+                        >
+                          {s.label}
+                          <ChevronRight size={10} />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <textarea
+                      id="custom-transcript-input"
+                      value={customTranscript}
+                      onChange={(e) => setCustomTranscript(e.target.value)}
+                      placeholder="Paste your video transcript, lecture notes, or captions here... (e.g. from YouTube's 'Show transcript' button)"
+                      rows={6}
+                      style={{
+                        width: "100%",
+                        background: "var(--field-bg)",
+                        border: "1px solid var(--line-2)",
+                        borderRadius: 10,
+                        padding: "0.75rem",
+                        fontSize: 12.5,
+                        color: "var(--text)",
+                        fontFamily: "inherit",
+                        resize: "vertical",
+                        lineHeight: 1.6,
+                      }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "var(--muted)" }}>
+                      <span>
+                        {customTranscript
+                          ? `${customTranscript.split(/\s+/).filter(Boolean).length.toLocaleString()} words pasted`
+                          : "Tip: On YouTube, click '...' → 'Show transcript' → copy & paste here"}
+                      </span>
+                      {customTranscript && (
+                        <button
+                          type="button"
+                          onClick={() => setCustomTranscript("")}
+                          style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 11 }}
+                        >
+                          Clear text
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* 1. Deliverable format */}
                 <div style={{ marginTop: "1.25rem" }}>
@@ -1132,19 +1202,34 @@ export default function Builder() {
               <div
                 style={{
                   marginTop: "0.5rem",
-                  padding: "0.75rem 1rem",
+                  padding: "0.875rem 1rem",
                   borderRadius: 10,
-                  border: "1px solid rgba(239,68,68,.25)",
-                  background: "rgba(239,68,68,.06)",
+                  border: "1px solid rgba(239,68,68,.3)",
+                  background: "rgba(239,68,68,.08)",
                   color: "#fca5a5",
                   fontSize: 13,
                   display: "flex",
-                  gap: "0.5rem",
+                  gap: "0.625rem",
                   alignItems: "flex-start",
                 }}
               >
-                <X size={14} style={{ marginTop: 2, flexShrink: 0 }} />
-                {error}
+                <X size={15} style={{ marginTop: 2, flexShrink: 0, color: "#ef4444" }} />
+                <div style={{ flex: 1 }}>
+                  <div>{error}</div>
+                  {(error.toLowerCase().includes("transcript") || error.toLowerCase().includes("caption") || error.toLowerCase().includes("cloud server")) && (
+                    <button
+                      type="button"
+                      className="chip on"
+                      style={{ marginTop: "0.625rem", fontSize: 11, padding: "0.35rem 0.75rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+                      onClick={() => {
+                        setSourceMode("transcript");
+                        setError("");
+                      }}
+                    >
+                      <FileText size={12} /> Paste Transcript / Notes Directly
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </form>
@@ -1395,9 +1480,6 @@ export default function Builder() {
                   ["design", "Live HTML", Globe],
                   ["read", "Reading View", BookOpen],
                   ["markdown", "Markdown", FileCode2],
-                  ["quiz", "Quiz", Sparkles],
-                  ["cards", "Flashcards", CheckSquare],
-                  ["analysis", "Analysis", ShieldCheck],
                   ["json", "JSON Data", FileCode2],
                 ] as const).map(([id, label, TabIcon]) => (
                   <button
@@ -1458,7 +1540,7 @@ export default function Builder() {
                 <div className="doc-eyebrow">Overview</div>
                 <p style={{ fontSize: 15, lineHeight: 1.8, color: "var(--doc-muted)", marginTop: "0.5rem" }}>{doc.summary}</p>
 
-                {doc.learningOutcomes.length > 0 && (
+                {doc.learningOutcomes && doc.learningOutcomes.length > 0 && (
                   <div style={{ marginTop: "1.25rem" }}>
                     <div
                       style={{
@@ -1619,7 +1701,7 @@ export default function Builder() {
                             </div>
                           )}
 
-                          {lesson.exercise && (
+                          {lesson.exercise && doc.format === "course" && (
                             <div className="practice-box">
                               <div
                                 style={{
@@ -1680,8 +1762,20 @@ export default function Builder() {
                 </section>
               ))}
 
+              {/* Conclusion (article/blog) */}
+              {doc.conclusion && (
+                <section style={{ marginTop: "2rem", paddingTop: "1.75rem", borderTop: "1px solid var(--doc-line)" }}>
+                  <div className="doc-eyebrow">Conclusion</div>
+                  <p
+                    style={{ marginTop: "0.875rem", fontSize: 15, lineHeight: 1.8, color: "var(--doc-text)" }}
+                  >
+                    {doc.conclusion}
+                  </p>
+                </section>
+              )}
+
               {/* Glossary */}
-              {doc.glossary.length > 0 && (
+              {doc.glossary && doc.glossary.length > 0 && (
                 <section style={{ marginTop: "2.5rem", paddingTop: "1.75rem", borderTop: "1px solid var(--doc-line)" }}>
                   <div className="doc-eyebrow">Glossary</div>
                   <div style={{ marginTop: "1rem", display: "grid", gap: "1rem" }}>
@@ -1710,7 +1804,7 @@ export default function Builder() {
               )}
 
               {/* Final checklist */}
-              {doc.finalChecklist.length > 0 && (
+              {doc.finalChecklist && doc.finalChecklist.length > 0 && (
                 <section style={{ marginTop: "2rem", paddingTop: "1.75rem", borderTop: "1px solid var(--doc-line)" }}>
                   <div className="doc-eyebrow">Final checklist</div>
                   <div style={{ marginTop: "0.875rem", display: "grid", gap: "0.5rem" }}>

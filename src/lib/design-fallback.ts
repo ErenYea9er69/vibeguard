@@ -15,22 +15,27 @@ export function renderDesignFallback(doc: GeneratedDocument, style: DesignStyle)
   const lessonHtml = (l: (typeof lessons)[number], idx: number) => `
     <article class="card lesson" data-i="${idx}">
       <h3>${esc(l.title)}</h3>
-      <p class="obj">${esc(l.objective)}</p>
+      ${l.objective ? `<p class="obj">${esc(l.objective)}</p>` : ""}
       <p>${esc(l.summary)}</p>
-      <ul>${l.keyPoints.map(k => `<li>${esc(k)}</li>`).join("")}</ul>
-      ${l.exercise ? `<details><summary>Practice</summary><p>${esc(l.exercise)}</p></details>` : ""}
-      ${style === "workbook" || style === "dashboard" ? `<label class="done"><input type="checkbox" onchange="prog()"> Mark as done</label>` : ""}
-      <div class="tags">${l.sourceVideoIds.map(id => `<span>${esc(id)}</span>`).join("")}</div>
+      ${l.keyPoints?.length ? `<ul>${l.keyPoints.map(k => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
+      ${l.exercise && doc.format === "course" ? `<details><summary>Practice</summary><p>${esc(l.exercise)}</p></details>` : ""}
+      ${(style === "workbook" || style === "dashboard") && l.exercise && doc.format === "course" ? `<label class="done"><input type="checkbox" onchange="prog()"> Mark as done</label>` : ""}
+      <div class="tags">${(l.sourceVideoIds || []).map(id => `<span>${esc(id)}</span>`).join("")}</div>
     </article>`;
   const body = doc.sections.map((s, si) => `
     <section id="s${si}" class="slide">
-      <h2>${esc(s.title)}</h2><p class="intro">${esc(s.intro)}</p>
+      <h2>${esc(s.title)}</h2>${s.intro ? `<p class="intro">${esc(s.intro)}</p>` : ""}
       ${lessons.filter(l => l.si === si).map(l => lessonHtml(l, lessons.indexOf(l))).join("")}
       ${(s.body ?? []).map(p => `<p>${esc(p)}</p>`).join("")}
-      <div class="take"><b>Takeaways</b><ul>${s.keyTakeaways.map(k => `<li>${esc(k)}</li>`).join("")}</ul></div>
+      ${s.keyTakeaways?.length ? `<div class="take"><b>Key Takeaways</b><ul>${s.keyTakeaways.map(k => `<li>${esc(k)}</li>`).join("")}</ul></div>` : ""}
     </section>`).join("");
   const toc = doc.sections.map((s, i) => `<a href="#s${i}">${esc(s.title)}</a>`).join("");
-  const gloss = doc.glossary.map(g => `<div class="term"><b>${esc(g.term)}</b><span>${esc(g.definition)}</span></div>`).join("");
+  const glossList = doc.glossary || [];
+  const gloss = glossList.map(g => `<div class="term"><b>${esc(g.term)}</b><span>${esc(g.definition)}</span></div>`).join("");
+  const checklistList = doc.finalChecklist || [];
+  const checklist = checklistList.map(c => `<li>${esc(c)}</li>`).join("");
+  const conclusionBlock = doc.conclusion ? `<section class="slide"><h2>Conclusion</h2><p class="intro">${esc(doc.conclusion)}</p></section>` : "";
+
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(doc.title)}</title>
 <style>
 :root{--bg:${t.bg};--ink:${t.ink};--accent:${t.accent};--card:${t.card}}
@@ -53,10 +58,11 @@ ${style === "slides" ? `.slide{display:none;min-height:70vh}.slide.on{display:bl
 <nav>${toc}</nav>
 <main>
 <p class="intro">${esc(doc.summary)}</p>
-${style === "dashboard" ? `<div class="card"><b>Progress</b> <span id="pct">0%</span></div><input type="search" id="q" placeholder="Filter glossary" oninput="flt()">` : ""}
+${style === "dashboard" && glossList.length > 0 ? `<div class="card"><b>Progress</b> <span id="pct">0%</span></div><input type="search" id="q" placeholder="Filter glossary" oninput="flt()">` : ""}
 ${body}
-<section class="slide"><h2>Glossary</h2><div id="g">${gloss}</div></section>
-<section class="slide"><h2>Final checklist</h2><ul>${doc.finalChecklist.map(c => `<li>${esc(c)}</li>`).join("")}</ul></section>
+${conclusionBlock}
+${glossList.length > 0 ? `<section class="slide"><h2>Glossary</h2><div id="g">${gloss}</div></section>` : ""}
+${checklistList.length > 0 ? `<section class="slide"><h2>Final checklist</h2><ul>${checklist}</ul></section>` : ""}
 </main>
 ${style === "slides" ? `<div class="ctl"><button onclick="go(-1)">Back</button><span id="n"></span><button onclick="go(1)">Next</button></div>` : ""}
 <script>

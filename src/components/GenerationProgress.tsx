@@ -71,8 +71,8 @@ export default function GenerationProgress({
     {
       id: "ai",
       number: 3,
-      label: "Curriculum Synthesis (Nemotron AI)",
-      desc: "Structuring concepts, modules, key takeaways & exercises",
+      label: "Deliverable Synthesis (Nemotron AI)",
+      desc: "Structuring core concepts, sections & key takeaways",
       Icon: Sparkles,
     },
     {

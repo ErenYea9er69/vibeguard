@@ -12,6 +12,7 @@ export const maxDuration = 300;
 
 const requestSchema = z.object({
   sourceUrl: z.string().optional().default(""),
+  customTranscript: z.string().optional().default(""),
   deliverableFormat: z.enum(["html", "pdf", "markdown", "json"]).optional().default("html"),
   format: z.enum(["course", "article", "blog"]).optional().default("article"),
   designStyle: z.enum(["auto", "editorial", "workbook", "dashboard", "slides"]).optional().default("auto"),
@@ -189,94 +190,158 @@ export async function POST(request: Request) {
             throw new Error("OPENROUTER_API_KEY is not configured in .env. Please configure your OpenRouter API key to use nvidia/nemotron-3-ultra-550b-a55b:free.");
           }
 
-          // Step 1 & 2: Source Discovery & Transcripts
-          emitProgress(
-            1,
-            12,
-            "Connecting to YouTube Source",
-            "Analyzing YouTube link format and resolving metadata...",
-            "source",
-            `Connecting to YouTube: ${body.sourceUrl}`,
-            "info"
-          );
+          let sourceVideos: any[] = [];
+          let sourceType: "video" | "playlist" = "video";
+          let sourceTitle = "YouTube Content";
+          let sourceChannel = "Creator";
 
-          let totalVideosToFetch = 1;
-          const source = await getSourceVideos(
-            body.sourceUrl,
-            body.maxVideos,
-            body.language,
-            (info) => {
-              if (info.stage === "playlist_found") {
-                totalVideosToFetch = info.total || 1;
-                emitProgress(
-                  1,
-                  20,
-                  "Discovered YouTube Playlist",
-                  `Found "${info.title}" with ${info.total} videos to process`,
-                  "source",
-                  `Found playlist "${info.title}" (${info.total} videos)`,
-                  "success"
-                );
-              } else if (info.stage === "video_found") {
-                emitProgress(
-                  1,
-                  20,
-                  "Found YouTube Video",
-                  info.message,
-                  "source",
-                  info.message,
-                  "info"
-                );
-              } else if (info.stage === "video_transcript") {
-                emitProgress(
-                  2,
-                  45,
-                  "Extracting Video Transcript",
-                  info.message,
-                  "transcripts",
-                  `✔ ${info.message}`,
-                  "success"
-                );
-              } else if (info.stage === "transcript_progress") {
-                const cur = info.current || 1;
-                const tot = info.total || totalVideosToFetch;
-                const pct = 20 + Math.round((cur / tot) * 35);
-                emitProgress(
-                  2,
-                  pct,
-                  "Extracting Video Transcripts",
-                  `Fetched ${cur} of ${tot}: "${info.videoTitle || "Video"}" (${info.words?.toLocaleString() || 0} words)`,
-                  "transcripts",
-                  `✔ [${cur}/${tot}] ${info.videoTitle || "Video"} (${info.words?.toLocaleString() || 0} words)`,
-                  "success"
-                );
+          const hasCustomTranscript = Boolean(body.customTranscript && body.customTranscript.trim().length > 20);
+
+          if (hasCustomTranscript) {
+            emitProgress(
+              1,
+              20,
+              "Direct Transcript Loaded",
+              "Using custom transcript provided directly...",
+              "source",
+              "Loaded custom transcript directly from user input",
+              "success"
+            );
+            if (body.sourceUrl && body.sourceUrl !== "demo") {
+              try {
+                const fetched = await getSourceVideos(body.sourceUrl, 1, body.language);
+                sourceType = fetched.type;
+                sourceTitle = fetched.title || "YouTube Content";
+                sourceChannel = fetched.channel || "Creator";
+                sourceVideos = fetched.videos.map(v => ({ ...v, transcript: body.customTranscript.trim() }));
+              } catch {
+                sourceVideos = [{
+                  id: "custom-source",
+                  url: body.sourceUrl,
+                  title: "Video Material",
+                  channel: "Creator",
+                  transcript: body.customTranscript.trim()
+                }];
               }
+            } else {
+              sourceVideos = [{
+                id: "custom-input",
+                url: "",
+                title: "Custom Transcript Document",
+                channel: "User Material",
+                transcript: body.customTranscript.trim()
+              }];
             }
-          );
+          } else {
+            if (!body.sourceUrl) {
+              throw new Error("Please enter a YouTube video URL, playlist URL, or paste a transcript.");
+            }
 
-          const totalWordsExtracted = source.videos.reduce(
+            emitProgress(
+              1,
+              12,
+              "Connecting to YouTube Source",
+              "Analyzing YouTube link format and resolving metadata...",
+              "source",
+              `Connecting to YouTube: ${body.sourceUrl}`,
+              "info"
+            );
+
+            let totalVideosToFetch = 1;
+            const fetched = await getSourceVideos(
+              body.sourceUrl,
+              body.maxVideos,
+              body.language,
+              (info) => {
+                if (info.stage === "playlist_found") {
+                  totalVideosToFetch = info.total || 1;
+                  emitProgress(
+                    1,
+                    20,
+                    "Discovered YouTube Playlist",
+                    `Found "${info.title}" with ${info.total} videos to process`,
+                    "source",
+                    `Found playlist "${info.title}" (${info.total} videos)`,
+                    "success"
+                  );
+                } else if (info.stage === "video_found") {
+                  emitProgress(
+                    1,
+                    20,
+                    "Found YouTube Video",
+                    info.message,
+                    "source",
+                    info.message,
+                    "info"
+                  );
+                } else if (info.stage === "video_transcript") {
+                  emitProgress(
+                    2,
+                    45,
+                    "Extracting Video Transcript",
+                    info.message,
+                    "transcripts",
+                    `✔ ${info.message}`,
+                    (info.words ?? 0) > 0 ? "success" : "warn"
+                  );
+                } else if (info.stage === "transcript_progress") {
+                  const cur = info.current || 1;
+                  const tot = info.total || totalVideosToFetch;
+                  const pct = 20 + Math.round((cur / tot) * 35);
+                  emitProgress(
+                    2,
+                    pct,
+                    "Extracting Video Transcripts",
+                    `Fetched ${cur} of ${tot}: "${info.videoTitle || "Video"}" (${info.words?.toLocaleString() || 0} words)`,
+                    "transcripts",
+                    `✔ [${cur}/${tot}] ${info.videoTitle || "Video"} (${info.words?.toLocaleString() || 0} words)`,
+                    "success"
+                  );
+                }
+              }
+            );
+
+            sourceType = fetched.type;
+            sourceTitle = fetched.title || "YouTube Content";
+            sourceChannel = fetched.channel || "Creator";
+            sourceVideos = fetched.videos;
+          }
+
+          const totalWordsExtracted = sourceVideos.reduce(
             (acc, v) => acc + (v.transcript ? v.transcript.split(/\s+/).filter(Boolean).length : 0),
             0
           );
+
+          if (totalWordsExtracted === 0) {
+            throw new Error(
+              `Could not extract automated captions for this YouTube video (captions are unavailable or blocked by YouTube on cloud servers). Please select 'Paste Transcript / Notes' to paste the transcript text directly and generate your ${body.format} instantly!`
+            );
+          }
 
           emitProgress(
             2,
             55,
             "Transcripts Extracted",
-            `Extracted transcripts across all ${source.videos.length} video(s) (${totalWordsExtracted.toLocaleString()} words total)`,
+            `Extracted transcripts across all ${sourceVideos.length} video(s) (${totalWordsExtracted.toLocaleString()} words total)`,
             "transcripts",
-            `All transcripts extracted: ${totalWordsExtracted.toLocaleString()} words total across ${source.videos.length} video(s)`,
+            `All transcripts extracted: ${totalWordsExtracted.toLocaleString()} words total across ${sourceVideos.length} video(s)`,
             "success"
           );
 
           // Step 3: Nemotron AI Synthesis
+          const formatTitle = body.format === "article"
+            ? "Synthesizing Article with Nemotron AI"
+            : body.format === "blog"
+            ? "Synthesizing Blog Post with Nemotron AI"
+            : "Synthesizing Curriculum with Nemotron AI";
+
           emitProgress(
             3,
             60,
-            "Synthesizing Curriculum with Nemotron AI",
-            `Sending ${totalWordsExtracted.toLocaleString()} words to NVIDIA Nemotron 3 Ultra for instructional synthesis...`,
+            formatTitle,
+            `Sending ${totalWordsExtracted.toLocaleString()} words to NVIDIA Nemotron AI for ${body.format} synthesis...`,
             "ai",
-            `Sending ${totalWordsExtracted.toLocaleString()} words to Nemotron AI for instructional analysis`,
+            `Sending ${totalWordsExtracted.toLocaleString()} words to Nemotron AI for ${body.format} synthesis`,
             "info"
           );
 
@@ -288,7 +353,7 @@ export async function POST(request: Request) {
               step: 3,
               totalSteps,
               percent: Math.min(78, 60 + Math.min(18, pingCount * 2)),
-              detail: `NVIDIA Nemotron 3 Ultra is actively synthesizing modules & concepts (${pingCount * 5}s elapsed)...`
+              detail: `NVIDIA Nemotron AI is actively synthesizing your ${body.format} (${pingCount * 5}s elapsed)...`
             });
           }, 5000);
 
@@ -296,11 +361,11 @@ export async function POST(request: Request) {
           try {
             document = await generateDocument(
               {
-                videos: source.videos,
+                videos: sourceVideos,
                 sourceUrl: body.sourceUrl,
-                sourceType: source.type,
-                sourceTitle: source.title,
-                channel: source.channel,
+                sourceType,
+                sourceTitle,
+                channel: sourceChannel,
                 format: body.format,
                 audience: body.audience,
                 tone: body.tone,
@@ -311,7 +376,7 @@ export async function POST(request: Request) {
                 emitProgress(
                   3,
                   72,
-                  "Synthesizing Curriculum with Nemotron AI",
+                  formatTitle,
                   aiInfo.message,
                   "ai",
                   aiInfo.message,
@@ -326,8 +391,8 @@ export async function POST(request: Request) {
           emitProgress(
             3,
             80,
-            "Curriculum Synthesized",
-            `Generated ${document.sections.length} module sections with key takeaways and exercises`,
+            `${body.format.toUpperCase()} Synthesized`,
+            `Generated ${document.sections.length} ${body.format} sections with key takeaways`,
             "ai",
             `Nemotron AI synthesis complete: ${document.sections.length} sections created`,
             "success"
